@@ -1,91 +1,172 @@
+import argparse
+import json
+import sys
+import math
+from pathlib import Path
 from PIL import Image
 from freetype.raw import *
-import argparse
-from pathlib import Path
-import math
+from ctypes import create_string_buffer, cast, pointer, POINTER, c_char, byref
 
-font_path = Path('.') / 'fonts' / 'PT_Sans' / 'PTSans-Regular.ttf'
-font_size = 16
-image_size = (800, 600)
+DEFAULT_CONFIG = {
+    "image_width": 800,
+    "image_height": 600,
+    "font_path": "fonts/PT_Sans/PTSans-Regular.ttf",
+    "font_size": 16,
+    "dpi": 96
+}
+
+def load_config(config_path):
+    config = DEFAULT_CONFIG.copy()
+    if config_path.exists():
+        with open(config_path, 'r', encoding='utf-8') as f:
+            user_config = json.load(f)
+            config.update(user_config)
+    else:
+        print(f"Файл конфигурации '{config_path}' не найден, используются значения по умолчанию.", file=sys.stderr)
+    return config
+
+def read_text(text_path):
+    if text_path == "-":
+        text = sys.stdin.read()
+    else:
+        input_path = Path(text_path)
+        if not input_path.exists():
+            print(f"Файл с текстом '{input_path}' не найден.", file=sys.stderr)
+            sys.exit(1)
+        with open(input_path, 'r', encoding='utf-8') as f:
+            text = f.read()
+    return text
 
 def to_c_str(text):
-    ''' Convert python strings to null terminated c strings. '''
-    cStr = create_string_buffer(text.encode(encoding='UTF-8'))
-    return cast(pointer(cStr), POINTER(c_char))
+    # Преобразует Python строку в null-terminated C строку.
 
-def draw_bitmap( image, bitmap, x, y):
-    x_max = x + bitmap.width
-    y_max = y + bitmap.rows
-    p = 0
-    for p,i in enumerate(range(x,x_max)):
-        for q,j in enumerate(range(y,y_max)):
-            if i < 0  or j < 0 or i >= image_size[0] or j >= image_size[1]:
-                continue;
-            pixel = image.getpixel((i,j))
-            pixel |= int(bitmap.buffer[q * bitmap.width + p]);
-            image.putpixel((i,j), pixel)
+    c_str = create_string_buffer(text.encode('utf-8'))
+    return cast(pointer(c_str), POINTER(c_char))
 
+def draw_bitmap(image, bitmap, x, y):
+    # Рисует bitmap глифа на изображении в заданных координатах (верхний левый угол).
 
-def init_freetype():
+    width, height = image.size
+    for row in range(bitmap.rows):
+        for col in range(bitmap.width):
+            px = x + col
+            py = y + row
+            if 0 <= px < width and 0 <= py < height:
+                # битмап одноканальный, значение интенсивности
+                value = bitmap.buffer[row * bitmap.width + col]
+                if value:
+                    # накладываем OR для совместимости с исходным стилем
+                    image.putpixel((px, py), image.getpixel((px, py)) | value)
+
+def init_freetype(font_path, font_size, dpi):
+    # Инициализирует библиотеку FreeType и загружает шрифт.
+
     library = FT_Library()
-    matrix  = FT_Matrix()
-    face    = FT_Face()
+    face = FT_Face()
+    matrix = FT_Matrix()
+    angle = 0.0
+    matrix.xx = int(math.cos(angle) * 0x10000)
+    matrix.xy = int(-math.sin(angle) * 0x10000)
+    matrix.yx = int(math.sin(angle) * 0x10000)
+    matrix.yy = int(math.cos(angle) * 0x10000)
 
-    # initialize library, error handling omitted
-    error = FT_Init_FreeType( byref(library) )
+    error = FT_Init_FreeType(byref(library))
+    if error:
+        raise RuntimeError("FT_Init_FreeType failed")
+    error = FT_New_Face(library, to_c_str(str(font_path)), 0, byref(face))
+    if error:
+        raise RuntimeError(f"FT_New_Face failed: {font_path}")
+    # устанавливаем размер шрифта (font_size в пунктах, dpi пикселей на дюйм)
+    error = FT_Set_Char_Size(face, 0, font_size * 64, dpi, dpi)
+    if error:
+        raise RuntimeError("FT_Set_Char_Size failed")
+    return library, matrix, face
 
-    # create face object, error handling omitted
-    error = FT_New_Face( library, to_c_str(str(font_path)), 0, byref(face) )
-
-    # set character size: 16pt at 300dpi, error handling omitted
-    error = FT_Set_Char_Size( face, 0, font_size * 64, 96, 96 )
+def draw_line(library, matrix, face, image, text, x, y):
+    # Рисует одну строку текста.
+    
     slot = face.contents.glyph
+    # метрики шрифта
+    ascender = face.contents.ascender / 64   # расстояние от top до baseline
+    # устанавливаем начальную позицию пера (baseline в координатах FreeType)
+    pen = FT_Vector()
+    pen.x = x * 64
+    pen.y = int(image.height - (y + ascender)) * 64
 
-    # set up matrix
-    angle = 0
-    matrix.xx = (int)( math.cos( angle ) * 0x10000 )
-    matrix.xy = (int)(-math.sin( angle ) * 0x10000 )
-    matrix.yx = (int)( math.sin( angle ) * 0x10000 )
-    matrix.yy = (int)( math.cos( angle ) * 0x10000 )
+    for ch in text:
+        # преобразование (поворот) и позиция пера
+        FT_Set_Transform(face, byref(matrix), byref(pen))
 
-    return library, matrix, face, slot
+        # загружаем глиф
+        index = FT_Get_Char_Index(face, ord(ch))
+        FT_Load_Glyph(face, index, FT_LOAD_RENDER)
 
-def draw_text(library, matrix, face, slot, image, text, x, y):
-    pen     = FT_Vector()
-    # the pen position in 26.6 cartesian space coordinates; */
-    # start at (300,200) relative to the upper left corner  */
-    pen.x = x * 64;
-    pen.y = int((image_size[1] - face.contents.height / 64 - y) * 64)
+        # получаем битмап
+        bitmap = slot.contents.bitmap
 
-    for i, c in enumerate(text):
-        # set transformation
-        FT_Set_Transform( face, byref(matrix), byref(pen) )
-
-        # load glyph image into the slot (erase previous one)
-        charcode = ord(c)
-        index = FT_Get_Char_Index( face, charcode )
-        FT_Load_Glyph( face, index, FT_LOAD_RENDER )
-
-        # now, draw to our target surface (convert position)
+        # blit bitmap onto image
         draw_bitmap( image, slot.contents.bitmap,
                      slot.contents.bitmap_left,
-                     image_size[1] - slot.contents.bitmap_top )
+                     int(image.height) - slot.contents.bitmap_top )
 
-        # increment pen position
+        # перемещаем перо вперёд
         pen.x += slot.contents.advance.x
         pen.y += slot.contents.advance.y
 
+def render_text(image, library, matrix, face, text, x, y, line_spacing=None):
+    # Рендерит многострочный текст на изображении.
+    # text – строка с символами '\n'.
+    # x, y – координаты верхнего левого угла первой строки.
+    # line_spacing – межстрочный интервал (по умолчанию высота шрифта).
+    
+    if line_spacing is None:
+        line_spacing = face.contents.height / 64
+    lines = text.split('\n')
+    for line in lines:
+        draw_line(library, matrix, face, image, line, x, y)
+        y += line_spacing
+
 def main():
-    library, matrix, face, slot = init_freetype()
-    image = Image.new('L', image_size)
-    text = 'Добрый день,\n мир!'
+    parser = argparse.ArgumentParser(description="Рендеринг текста в изображение с помощью FreeType")
+    parser.add_argument("--config", default="config.json",
+                        help="Путь к JSON-файлу конфигурации (по умолчанию config.json)")
+    parser.add_argument("--input", "-i", default="-",
+                        help="Путь к файлу с текстом; '-' для чтения из stdin (по умолчанию)")
+    parser.add_argument("--output", "-o", default="output.png",
+                        help="Путь к выходному изображению (по умолчанию output.png)")
+    args = parser.parse_args()
 
-    draw_text(library, matrix, face, slot, image, text, 0, 0)
+    # загрузка конфигурации
+    config = load_config(config, Path(args.config))
 
+    # чтение текста
+    text = read_text(args.input)
+
+    # параметры из конфига
+    image_size = (config["image_width"], config["image_height"])
+    font_path = Path(config["font_path"])
+    if not font_path.exists():
+        print(f"Файл шрифта '{font_path}' не найден.", file=sys.stderr)
+        sys.exit(1)
+    font_size = config["font_size"]
+    dpi = config["dpi"]
+
+    # инициализация FreeType
+    library, matrix, face = init_freetype(font_path, font_size, dpi)
+
+    # создание изображения (чёрный фон)
+    image = Image.new('L', image_size, 0)
+
+    # рендеринг текста
+    render_text(image, library, matrix, face, text, 0, 0)
+
+    # освобождение ресурсов
     FT_Done_Face(face)
     FT_Done_FreeType(library)
 
-    image.save('test.png')
+    # сохранение результата
+    image.save(args.output)
+    print(f"Изображение сохранено в {args.output}")
 
 if __name__ == '__main__':
     main()
