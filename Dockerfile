@@ -31,4 +31,5 @@ RUN pip install --no-cache-dir -U pip \
 
 COPY . .
 
-CMD ["python", "evaluate.py", "--help"]
+EXPOSE 8000
+CMD ["uvicorn", "webapp.app:app", "--host", "0.0.0.0", "--port", "8000"]

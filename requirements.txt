@@ -1,6 +1,12 @@
 Pillow
 freetype-py
 
+# Web UI
+fastapi
+uvicorn[standard]
+jinja2
+pydantic
+
 # OCR engines / wrappers
 pytesseract
 easyocr

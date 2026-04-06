@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OCR Defense — Testing</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="container">
+        <div class="brand">OCR Defense</div>
+        <nav class="nav">
+          <a class="nav__link" href="/">Render</a>
+          <a class="nav__link nav__link--active" href="/testing">Testing</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container grid">
+      <section class="card">
+        <h2>Настройки тестирования</h2>
+
+        <label>Текст</label>
+        <textarea id="text" class="textarea" rows="6">Привет мир</textarea>
+
+        <hr class="sep" />
+
+        <h3>Engines</h3>
+        <div class="row">
+          <label class="inline"><input type="checkbox" class="engine" value="tesseract" checked /> tesseract</label>
+          <label class="inline"><input type="checkbox" class="engine" value="trocr" checked /> trocr</label>
+          <label class="inline"><input type="checkbox" class="engine" value="easyocr" checked /> easyocr</label>
+          <label class="inline"><input type="checkbox" class="engine" value="paddleocr" /> paddleocr</label>
+        </div>
+        <p class="hint">Если `paddlepaddle` не установлен, `paddleocr` будет помечен как skipped.</p>
+
+        <hr class="sep" />
+
+        <h3>Render</h3>
+        <div class="formgrid">
+          <label>Ширина <input id="image_width" type="number" value="800" min="64" /></label>
+          <label>Высота <input id="image_height" type="number" value="600" min="64" /></label>
+          <label>Размер шрифта <input id="font_size" type="number" value="22" min="8" /></label>
+          <label>DPI <input id="dpi" type="number" value="96" min="50" /></label>
+          <label>Цвет текста <input id="text_color" type="color" value="#000000" /></label>
+          <label>Цвет фона <input id="background_color" type="color" value="#ffffff" /></label>
+          <label class="span2">Путь к шрифту (опционально)
+            <input id="font_path" type="text" placeholder="например: fonts/PT_Sans/PTSans-Regular.ttf" />
+          </label>
+        </div>
+
+        <hr class="sep" />
+
+        <h3>Attack</h3>
+        <label>Режим
+          <select id="attack">
+            <option value="none">none</option>
+            <option value="semantic">semantic</option>
+            <option value="diacritics">diacritics</option>
+            <option value="image_patch">image_patch</option>
+            <option value="all" selected>all</option>
+          </select>
+        </label>
+
+        <details class="details" open>
+          <summary>Advanced</summary>
+
+          <div class="subcard">
+            <div class="row row--between">
+              <h3>Semantic</h3>
+              <label class="inline"><input id="sem_enabled" type="checkbox" checked /> Включить</label>
+            </div>
+            <div class="formgrid">
+              <label>Language
+                <select id="sem_language">
+                  <option value="auto" selected>auto</option>
+                  <option value="ru">ru</option>
+                  <option value="en">en</option>
+                </select>
+              </label>
+              <label>max_changed_words <input id="sem_max_changed_words" type="number" value="3" min="0" /></label>
+              <label>population_size <input id="sem_population_size" type="number" value="24" min="2" /></label>
+              <label>generations <input id="sem_generations" type="number" value="18" min="0" /></label>
+              <label>random_seed <input id="sem_random_seed" type="number" placeholder="(опционально)" /></label>
+              <label class="span2">oracle engine (опционально) <input id="sem_oracle_engine" type="text" placeholder="например: tesseract" /></label>
+            </div>
+          </div>
+
+          <div class="subcard">
+            <div class="row row--between">
+              <h3>Diacritics</h3>
+              <label class="inline"><input id="dia_enabled" type="checkbox" checked /> Включить</label>
+            </div>
+            <div class="formgrid">
+              <label>budget_per_word <input id="dia_budget_per_word" type="number" value="5" min="0" /></label>
+              <label>probability <input id="dia_probability" type="number" value="0.6" min="0" max="1" step="0.05" /></label>
+              <label>random_seed <input id="dia_random_seed" type="number" placeholder="(опционально)" /></label>
+            </div>
+          </div>
+
+          <div class="subcard">
+            <div class="row row--between">
+              <h3>Image patch</h3>
+              <label class="inline"><input id="ip_enabled" type="checkbox" checked /> Включить</label>
+            </div>
+            <div class="formgrid">
+              <label>max_patches_per_line <input id="ip_max_patches_per_line" type="number" value="1" min="0" /></label>
+              <label>random_seed <input id="ip_random_seed" type="number" placeholder="(опционально)" /></label>
+            </div>
+          </div>
+        </details>
+
+        <div class="row">
+          <button id="btnRun" class="btn btn--primary">Запустить тестирование</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Результаты</h2>
+        <div id="status" class="hint">Готово.</div>
+        <pre id="results" class="pre pre--scroll"></pre>
+      </section>
+    </main>
+
+    <script src="/static/testing.js"></script>
+  </body>
+</html>
+
