@@ -7,6 +7,13 @@ from typing import List, Sequence, Tuple
 
 
 def normalize_text(s: str, *, lowercase: bool = True, strip: bool = True) -> str:
+    """
+    Нормализация строки перед расчётом метрик OCR.
+
+    - NFKC: приводит совместимые символы к каноническому виду (например, разные формы пробелов/кавычек).
+    - strip/lowercase: убирает края и (опционально) приводит к нижнему регистру.
+    - collapse whitespace: для OCR важно сравнивать содержимое, а не артефакты переносов/множественных пробелов.
+    """
     s = unicodedata.normalize("NFKC", s)
     if strip:
         s = s.strip()
@@ -18,7 +25,7 @@ def normalize_text(s: str, *, lowercase: bool = True, strip: bool = True) -> str
 
 
 def _edit_distance(a: Sequence[str], b: Sequence[str]) -> int:
-    # Levenshtein distance.
+    # Levenshtein distance: минимальное число вставок/удалений/замен для превращения a -> b.
     n, m = len(a), len(b)
     if n == 0:
         return m
@@ -41,6 +48,12 @@ def _edit_distance(a: Sequence[str], b: Sequence[str]) -> int:
 
 
 def cer(reference: str, hypothesis: str, *, lowercase: bool = True) -> float:
+    """
+    CER (Character Error Rate) = LevenshteinDistance(chars(ref), chars(hyp)) / max(1, len(ref)).
+
+    - 0.0 означает полное совпадение.
+    - Значения > 1.0 возможны (например, если гипотеза сильно длиннее эталона).
+    """
     ref = normalize_text(reference, lowercase=lowercase)
     hyp = normalize_text(hypothesis, lowercase=lowercase)
     # Character-level distance.
@@ -48,6 +61,11 @@ def cer(reference: str, hypothesis: str, *, lowercase: bool = True) -> float:
 
 
 def wer(reference: str, hypothesis: str, *, lowercase: bool = True) -> float:
+    """
+    WER (Word Error Rate) = LevenshteinDistance(tokens(ref), tokens(hyp)) / max(1, num_tokens(ref)).
+
+    Токенизация здесь простая: разбиение по пробелам после normalize_text().
+    """
     ref = normalize_text(reference, lowercase=lowercase)
     hyp = normalize_text(hypothesis, lowercase=lowercase)
     ref_toks = [t for t in ref.split(" ") if t]

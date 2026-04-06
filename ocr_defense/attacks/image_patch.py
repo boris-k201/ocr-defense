@@ -46,8 +46,13 @@ def _composite_or(base: Image.Image, overlay: Image.Image, bbox: Tuple[int, int,
     for y in range(y1, y2):
         for x in range(x1, x2):
             ov = overlay.getpixel((x, y))
-            if ov:
-                base.putpixel((x, y), max(base.getpixel((x, y)), ov))
+            if isinstance(ov, tuple):
+                if any(ov):
+                    bv = base.getpixel((x, y))
+                    base.putpixel((x, y), tuple(max(int(bv[i]), int(ov[i])) for i in range(len(ov))))
+            else:
+                if ov:
+                    base.putpixel((x, y), max(base.getpixel((x, y)), ov))
 
 
 def image_patch_attack(
@@ -89,7 +94,10 @@ def image_patch_attack(
                 draw = ImageDraw.Draw(img)
                 # Draw a filled rectangle with light noise color.
                 fill_val = rng.randint(config.pixel_value_min, config.pixel_value_max)
-                draw.rectangle(patch_bbox, fill=fill_val)
+                if img.mode == "RGB":
+                    draw.rectangle(patch_bbox, fill=(fill_val, fill_val, fill_val))
+                else:
+                    draw.rectangle(patch_bbox, fill=fill_val)
 
             if "pixel" in config.effects:
                 draw = ImageDraw.Draw(img)
@@ -100,7 +108,11 @@ def image_patch_attack(
                             v = int((config.pixel_value_min + config.pixel_value_max) / 2)
                         else:
                             v = rng.randint(config.pixel_value_min, config.pixel_value_max)
-                        img.putpixel((x, y), min(255, max(0, v)))
+                        v = min(255, max(0, v))
+                        if img.mode == "RGB":
+                            img.putpixel((x, y), (v, v, v))
+                        else:
+                            img.putpixel((x, y), v)
 
             if "text" in config.effects:
                 # Render a small string inside the patch bbox.
@@ -117,6 +129,9 @@ def image_patch_attack(
                     font_path=renderer.config.font_path,
                     font_size=font_size,
                     dpi=renderer.config.dpi,
+                    # Патч-текст должен быть видимым; рендерим чёрным по белому.
+                    text_color="#000000",
+                    background_color="#FFFFFF",
                 )
                 with FreeTypeRenderer(patch_cfg) as small_renderer:
                     overlay = small_renderer.render(patch_text, x=px1, y=py1, line_spacing=None, record_line_bboxes=False)

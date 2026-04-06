@@ -6,11 +6,14 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple, Union
 
 from PIL import Image
 from freetype.raw import *  # noqa: F403 - keep parity with original project
 from ctypes import POINTER, byref, cast, create_string_buffer, pointer, c_char
+
+
+RGBColor = Tuple[int, int, int]
 
 
 @dataclass(frozen=True)
@@ -21,6 +24,10 @@ class RenderConfig:
     font_path: Optional[str] = None
     font_size: int = 16
     dpi: int = 96
+    # Цвет текста и фона. Можно задавать как "#RRGGBB" или [r,g,b].
+    # По умолчанию: чёрный текст на белом фоне.
+    text_color: Union[str, Sequence[int]] = "#000000"
+    background_color: Union[str, Sequence[int]] = "#FFFFFF"
 
 
 DEFAULT_RENDER_CONFIG = RenderConfig()
@@ -48,6 +55,8 @@ def load_render_config(config_path: Path) -> RenderConfig:
         font_path=fp,
         font_size=int(user_cfg.get("font_size", cfg.font_size)),
         dpi=int(user_cfg.get("dpi", cfg.dpi)),
+        text_color=user_cfg.get("text_color", cfg.text_color),
+        background_color=user_cfg.get("background_color", cfg.background_color),
     )
 
 
@@ -98,8 +107,37 @@ def to_c_str(text: str):
     return cast(pointer(c_str), POINTER(c_char))  # type: ignore[name-defined]
 
 
-def draw_bitmap(image: Image.Image, bitmap, x: int, y: int) -> None:
-    # Draw a FreeType monochrome glyph bitmap onto a grayscale image.
+def _clamp8(x: int) -> int:
+    return 0 if x < 0 else 255 if x > 255 else x
+
+
+def parse_rgb_color(value: Union[str, Sequence[int]]) -> RGBColor:
+    """
+    Поддерживает:
+    - "#RRGGBB"
+    - [r, g, b] или (r, g, b)
+    - int (0..255) как оттенок серого
+    """
+    if isinstance(value, str):
+        s = value.strip()
+        if s.startswith("#") and len(s) == 7:
+            r = int(s[1:3], 16)
+            g = int(s[3:5], 16)
+            b = int(s[5:7], 16)
+            return (_clamp8(r), _clamp8(g), _clamp8(b))
+        raise ValueError(f"Unsupported color string format: {value!r}. Expected '#RRGGBB'.")
+    if isinstance(value, int):
+        v = _clamp8(value)
+        return (v, v, v)
+    seq = list(value)
+    if len(seq) != 3:
+        raise ValueError(f"Unsupported color value: {value!r}. Expected 3 components.")
+    r, g, b = (int(seq[0]), int(seq[1]), int(seq[2]))
+    return (_clamp8(r), _clamp8(g), _clamp8(b))
+
+
+def draw_bitmap(image: Image.Image, bitmap, x: int, y: int, *, text_color: RGBColor) -> None:
+    # Draw a FreeType grayscale glyph bitmap onto an RGB image using alpha blending.
     width, height = image.size
     for row in range(bitmap.rows):
         for col in range(bitmap.width):
@@ -109,8 +147,13 @@ def draw_bitmap(image: Image.Image, bitmap, x: int, y: int) -> None:
                 # bitmap is single-channel intensity.
                 value = bitmap.buffer[row * bitmap.width + col]
                 if value:
-                    # OR for compatibility with original style.
-                    image.putpixel((px, py), image.getpixel((px, py)) | value)
+                    a = value / 255.0
+                    br, bg, bb = image.getpixel((px, py))
+                    tr, tg, tb = text_color
+                    nr = int(br * (1.0 - a) + tr * a)
+                    ng = int(bg * (1.0 - a) + tg * a)
+                    nb = int(bb * (1.0 - a) + tb * a)
+                    image.putpixel((px, py), (_clamp8(nr), _clamp8(ng), _clamp8(nb)))
 
 
 def _create_transform_matrix() -> FT_Matrix:
@@ -177,6 +220,8 @@ def draw_line(
     text: str,
     x: int,
     y_top: float,
+    *,
+    text_color: RGBColor,
 ) -> None:
     # Draw a single line. Baseline учитывает максимальный ascender среди используемых лиц.
     ascender = _line_ascender_px(system_face, user_face)
@@ -194,7 +239,13 @@ def draw_line(
         FT_Load_Glyph(face, index, FT_LOAD_RENDER)
 
         bitmap = slot.contents.bitmap
-        draw_bitmap(image, bitmap, slot.contents.bitmap_left, int(image.height) - slot.contents.bitmap_top)
+        draw_bitmap(
+            image,
+            bitmap,
+            slot.contents.bitmap_left,
+            int(image.height) - slot.contents.bitmap_top,
+            text_color=text_color,
+        )
 
         pen.x += slot.contents.advance.x
         pen.y += slot.contents.advance.y
@@ -223,6 +274,7 @@ def render_text(
     line_spacing: Optional[float] = None,
     *,
     record_line_bboxes: bool = False,
+    text_color: RGBColor,
 ) -> Optional[List[Tuple[int, int, int, int]]]:
     """
     Render multi-line `text` onto `image`.
@@ -237,7 +289,7 @@ def render_text(
 
     for i, line in enumerate(lines):
         y_top = y + i * line_spacing
-        draw_line(library, matrix, system_face, user_face, image, line, x, y_top)
+        draw_line(library, matrix, system_face, user_face, image, line, x, y_top, text_color=text_color)
         if record_line_bboxes:
             width = measure_line_width(system_face, user_face, line)
             line_bboxes.append((x, int(y_top), x + int(width), int(y_top + line_spacing)))
@@ -268,6 +320,8 @@ class FreeTypeRenderer:
                 render_config.font_size,
                 render_config.dpi,
             )
+        self.text_rgb = parse_rgb_color(render_config.text_color)
+        self.background_rgb = parse_rgb_color(render_config.background_color)
 
     def close(self) -> None:
         if self.user_face is not None:
@@ -290,7 +344,7 @@ class FreeTypeRenderer:
         line_spacing: Optional[float] = None,
         record_line_bboxes: bool = False,
     ):
-        image = Image.new("L", (self.config.image_width, self.config.image_height), 0)
+        image = Image.new("RGB", (self.config.image_width, self.config.image_height), self.background_rgb)
         bboxes = render_text(
             image,
             self.library,
@@ -302,6 +356,7 @@ class FreeTypeRenderer:
             y,
             line_spacing=line_spacing,
             record_line_bboxes=record_line_bboxes,
+            text_color=self.text_rgb,
         )
         if record_line_bboxes:
             assert bboxes is not None
