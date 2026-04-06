@@ -1,0 +1,12 @@
+Pillow
+freetype-py
+
+# OCR engines / wrappers
+pytesseract
+easyocr
+transformers
+torch
+torchvision
+
+# PaddleOCR (requires paddlepaddle separately; see Dockerfile / README)
+paddleocr
