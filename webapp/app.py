@@ -31,6 +31,7 @@ AttackName = Literal["none", "semantic", "diacritics", "image_patch", "all"]
 class RenderOptions(BaseModel):
     image_width: int = 800
     image_height: int = 600
+    margin: int = 10
     font_path: Optional[str] = None
     font_size: int = 22
     dpi: int = 96
@@ -122,6 +123,7 @@ def _render_config_from_opts(opts: RenderOptions) -> RenderConfig:
     return RenderConfig(
         image_width=opts.image_width,
         image_height=opts.image_height,
+        margin=opts.margin,
         font_path=opts.font_path,
         font_size=opts.font_size,
         dpi=opts.dpi,

@@ -36,6 +36,7 @@
         <div class="formgrid">
           <label>Ширина <input id="image_width" type="number" value="800" min="64" /></label>
           <label>Высота <input id="image_height" type="number" value="600" min="64" /></label>
+          <label>Поля <input id="margin" type="number" value="10" min="0" /></label>
           <label>Размер шрифта <input id="font_size" type="number" value="22" min="8" /></label>
           <label>DPI <input id="dpi" type="number" value="96" min="50" /></label>
           <label>Цвет текста <input id="text_color" type="color" value="#000000" /></label>
@@ -72,7 +73,7 @@
           <div class="subcard">
             <div class="row row--between">
               <h3>Semantic</h3>
-              <label class="inline"><input id="sem_enabled" type="checkbox" /> Включить</label>
+              <label class="inline"><input id="sem_enabled" type="checkbox" checked/> Включить</label>
             </div>
             <div class="formgrid">
               <label>Language
@@ -93,7 +94,7 @@
           <div class="subcard">
             <div class="row row--between">
               <h3>Diacritics</h3>
-              <label class="inline"><input id="dia_enabled" type="checkbox" /> Включить</label>
+              <label class="inline"><input id="dia_enabled" type="checkbox" checked/> Включить</label>
             </div>
             <div class="formgrid">
               <label>budget_per_word <input id="dia_budget_per_word" type="number" value="5" min="0" /></label>
@@ -105,7 +106,7 @@
           <div class="subcard">
             <div class="row row--between">
               <h3>Image patch</h3>
-              <label class="inline"><input id="ip_enabled" type="checkbox" /> Включить</label>
+              <label class="inline"><input id="ip_enabled" type="checkbox" checked/> Включить</label>
             </div>
             <div class="formgrid">
               <label>max_patches_per_line <input id="ip_max_patches_per_line" type="number" value="1" min="0" /></label>

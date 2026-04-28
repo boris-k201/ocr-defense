@@ -21,6 +21,7 @@ function buildPayload() {
     render: {
       image_width: Number($("image_width").value),
       image_height: Number($("image_height").value),
+      margin: Number($("margin").value),
       font_path: $("font_path").value.trim() || null,
       font_size: Number($("font_size").value),
       dpi: Number($("dpi").value),

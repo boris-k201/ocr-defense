@@ -306,7 +306,7 @@ def render_text(
     Returns a list of line bboxes (x1, y1, x2, y2) if record_line_bboxes=True.
     """
     if line_spacing is None:
-        line_spacing = _line_height_px(system_face, user_face)
+        line_spacing = _line_height_px(system_face, user_face) * 108 / 100
 
     lines = split_text_by_line(system_face, user_face, text, image.width - 2 * margin)
     line_bboxes: List[Tuple[int, int, int, int]] = []
