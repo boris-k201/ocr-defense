@@ -20,6 +20,7 @@ RGBColor = Tuple[int, int, int]
 class RenderConfig:
     image_width: int = 800
     image_height: int = 600
+    margin: int = 10
     # Если None — только системный шрифт; иначе этот файл используется для поддерживаемых глифов.
     font_path: Optional[str] = None
     font_size: int = 16
@@ -52,6 +53,7 @@ def load_render_config(config_path: Path) -> RenderConfig:
     return RenderConfig(
         image_width=int(user_cfg.get("image_width", cfg.image_width)),
         image_height=int(user_cfg.get("image_height", cfg.image_height)),
+        margin=int(user_cfg.get("margin", cfg.margin)),
         font_path=fp,
         font_size=int(user_cfg.get("font_size", cfg.font_size)),
         dpi=int(user_cfg.get("dpi", cfg.dpi)),
@@ -267,10 +269,16 @@ def split_text_by_line(system_face: FT_Face, user_face: Optional[FT_Face], text,
     for word in text.split(' '):
         ws = word.split('\n')
         while len(ws) > 1:
-            current_line.append(ws.pop(0))
+            w = ws.pop(0)
+            lw = measure_line_width(system_face, user_face, ' '.join(current_line + [w]))
+            if lw >= max_width:
+                result.append(' '.join(current_line))
+                current_line = []
+            current_line.append(w)
             result.append(' '.join(current_line))
             current_line = []
-        if measure_line_width(system_face, user_face, ' '.join(current_line + [ws[0]])) > max_width:
+        lw = measure_line_width(system_face, user_face, ' '.join(current_line + [ws[0]]))
+        if lw >= max_width:
             result.append(' '.join(current_line))
             current_line = []
         current_line.append(ws[0])
@@ -288,6 +296,7 @@ def render_text(
     y: int,
     line_spacing: Optional[float] = None,
     *,
+    margin: int = 0,
     record_line_bboxes: bool = False,
     text_color: RGBColor,
 ) -> Optional[List[Tuple[int, int, int, int]]]:
@@ -299,16 +308,15 @@ def render_text(
     if line_spacing is None:
         line_spacing = _line_height_px(system_face, user_face)
 
-#    lines = text.split("\n")
-    lines = split_text_by_line(system_face, user_face, text, image.width)
+    lines = split_text_by_line(system_face, user_face, text, image.width - 2 * margin)
     line_bboxes: List[Tuple[int, int, int, int]] = []
-
     for i, line in enumerate(lines):
-        y_top = y + i * line_spacing
-        draw_line(library, matrix, system_face, user_face, image, line, x, y_top, text_color=text_color)
+        y_top = y + margin + i * line_spacing
+        draw_line(library, matrix, system_face, user_face, image, line, x + margin, y_top, text_color=text_color)
         if record_line_bboxes:
             width = measure_line_width(system_face, user_face, line)
-            line_bboxes.append((x, int(y_top), x + int(width), int(y_top + line_spacing)))
+            line_bboxes.append((x + margin, int(y_top + margin), 
+                                x + margin + int(width), int(y_top + margin + line_spacing)))
 
     return line_bboxes if record_line_bboxes else None
 
@@ -370,6 +378,7 @@ class FreeTypeRenderer:
             text,
             x,
             y,
+            margin=self.config.margin,
             line_spacing=line_spacing,
             record_line_bboxes=record_line_bboxes,
             text_color=self.text_rgb,

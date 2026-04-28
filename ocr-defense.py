@@ -70,8 +70,7 @@ def init_def_subparser(def_subparser):
         help="Фиксированный seed для воспроизводимости атак (опционально)",
     )
     def_subparser.add_argument(
-        "-v",
-        "--verbose",
+        "--verbose", "-v",
         action="store_true",
         help="Вывести в stderr итоговый текст после атак и краткие метаданные",
     )
@@ -95,7 +94,7 @@ def init_eval_subparser(eval_subparser):
 def def_mode(args):
     # загрузка конфигурации
     config_path = Path(args.config)
-    if not config_path.exists():
+    if args.verbose and not config_path.exists():
         print(
             f"Файл конфигурации '{config_path}' не найден, используются значения по умолчанию.",
             file=sys.stderr,
@@ -127,7 +126,8 @@ def def_mode(args):
 
     # сохранение результата
     image.save(args.output)
-    print(f"Изображение сохранено в {args.output}")
+    if args.verbose:
+        print(f"Изображение сохранено в {args.output}")
 
 def eval_mode(args):
     config_path = Path(args.config)
