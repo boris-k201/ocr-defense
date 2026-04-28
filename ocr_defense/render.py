@@ -261,6 +261,21 @@ def measure_line_width(system_face: FT_Face, user_face: Optional[FT_Face], text:
         width_1_64 += slot.contents.advance.x
     return width_1_64 // 64
 
+def split_text_by_line(system_face: FT_Face, user_face: Optional[FT_Face], text, max_width):
+    result = []
+    current_line = []
+    for word in text.split(' '):
+        ws = word.split('\n')
+        while len(ws) > 1:
+            current_line.append(ws.pop(0))
+            result.append(' '.join(current_line))
+            current_line = []
+        if measure_line_width(system_face, user_face, ' '.join(current_line + [ws[0]])) > max_width:
+            result.append(' '.join(current_line))
+            current_line = []
+        current_line.append(ws[0])
+    result.append(' '.join(current_line))
+    return result
 
 def render_text(
     image: Image.Image,
@@ -284,7 +299,8 @@ def render_text(
     if line_spacing is None:
         line_spacing = _line_height_px(system_face, user_face)
 
-    lines = text.split("\n")
+#    lines = text.split("\n")
+    lines = split_text_by_line(system_face, user_face, text, image.width)
     line_bboxes: List[Tuple[int, int, int, int]] = []
 
     for i, line in enumerate(lines):
