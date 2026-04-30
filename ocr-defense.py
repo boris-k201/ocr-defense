@@ -15,6 +15,7 @@ from ocr_defense.attacks.diacritics import DiacriticsAttackConfig
 from ocr_defense.attacks.image_patch import ImagePatchAttackConfig
 from ocr_defense.attacks.semantic import SemanticAttackConfig
 from ocr_defense.evaluation import AttackConfig, AttackPipeline, evaluate_ocr_engines
+from ocr_defense.ocr_engines import ENGINE_RUNNERS
 from ocr_defense.render import FreeTypeRenderer, load_render_config
 
 def read_text(text_path: str) -> str:
@@ -81,8 +82,8 @@ def init_eval_subparser(eval_subparser):
     eval_subparser.add_argument("--output", "-o", default="ocr_results.json", help="Путь к JSON с результатами")
     eval_subparser.add_argument(
         "--engines", "-e",
-        default="tesseract,trocr,easyocr",
-        help="Список OCR-движков через запятую (tesseract, trocr, easyocr; paddleocr — только при установленном paddlepaddle)",
+        default=f'{",".join([k for k in ENGINE_RUNNERS.keys()])}',
+        help=f"Список OCR-движков через запятую ({', '.join([k for k in ENGINE_RUNNERS.keys()])})",
     )
     eval_subparser.add_argument(
         "--attack", "-a",

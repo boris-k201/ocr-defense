@@ -6,11 +6,13 @@ fastapi
 uvicorn[standard]
 jinja2
 pydantic
+httpx
 
 # OCR engines / wrappers
 pytesseract
 easyocr
 transformers
+accelerate
 torch
 torchvision
 

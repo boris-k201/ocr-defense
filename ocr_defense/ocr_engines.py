@@ -3,24 +3,24 @@ from __future__ import annotations
 import logging
 import os
 import warnings
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Sequence, Tuple
 
 from PIL import Image
 
 
 class OCRNotAvailable(RuntimeError):
-    pass
+    """Raised when an OCR engine is not available in the current environment."""
 
 
-def _require_import(module_name: str):
+def _require_import(module_name: str) -> None:
     import importlib.util
 
     if importlib.util.find_spec(module_name) is None:
         raise OCRNotAvailable(f"Module '{module_name}' is not installed in the current venv.")
 
 
-# Кэш тяжёлых моделей (evaluate вызывает OCR дважды: original + attacked).
-_trocr_cache: Optional[Tuple[Any, Any]] = None
+# Caches (evaluate calls engines twice: original + attacked).
+_trocr_cache: Optional[Tuple[Any, Any, str]] = None  # (processor, model, device)
 _easyocr_readers: Dict[Tuple[str, ...], Any] = {}
 _paddleocr_instance: Optional[Any] = None
 
@@ -46,82 +46,126 @@ def ocr_easyocr(img: Image.Image, *, languages: Optional[list[str]] = None) -> s
         _easyocr_readers[cache_key] = easyocr.Reader(languages, gpu=False)
     reader = _easyocr_readers[cache_key]
 
-    # EasyOCR expects RGB numpy array.
-    rgb = img.convert("RGB")
-    arr = np.asarray(rgb)
+    arr = np.asarray(img.convert("RGB"))
     with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore",
-            message=".*pin_memory.*",
-            category=UserWarning,
-        )
+        warnings.filterwarnings("ignore", message=".*pin_memory.*", category=UserWarning)
         results = reader.readtext(arr, detail=1)
-    # detail=1 -> list of (bbox, text, conf)
     texts = [r[1] for r in results]
     return "\n".join(texts)
 
 
+def _extract_paddleocr_text(results: Any) -> str:
+    """
+    PaddleOCR can return:
+    - list[ list[ (bbox, (text, conf)) ] ]  (older)
+    - list[ (bbox, (text, conf)) ]         (some configs)
+    - list[dict] with keys like 'text'     (newer/structured)
+    We normalize all to a joined string.
+    """
+    texts: list[str] = []
+    if results is None:
+        return ""
+
+    def handle_item(item: Any) -> None:
+        if item is None:
+            return
+        if isinstance(item, str):
+            if item.strip():
+                texts.append(item.strip())
+            return
+        if isinstance(item, dict):
+            t = item.get("text") or item.get("rec_text") or item.get("ocr_text")
+            if isinstance(t, str) and t.strip():
+                texts.append(t.strip())
+            return
+        if isinstance(item, (list, tuple)) and len(item) == 2:
+            # (bbox, (text, conf)) or (bbox, text)
+            maybe = item[1]
+            if isinstance(maybe, (list, tuple)) and len(maybe) >= 1 and isinstance(maybe[0], str):
+                texts.append(maybe[0])
+                return
+            if isinstance(maybe, str):
+                texts.append(maybe)
+                return
+
+    if isinstance(results, (list, tuple)):
+        for x in results:
+            if isinstance(x, (list, tuple)) and x and isinstance(x[0], (list, tuple)) and len(x) > 0 and len(x[0]) == 2:
+                # nested list of lines
+                for y in x:
+                    handle_item(y)
+            else:
+                handle_item(x)
+    else:
+        handle_item(results)
+
+    return "\n".join([t for t in texts if isinstance(t, str) and t.strip()])
+
+
 def ocr_paddleocr(img: Image.Image, *, languages: Optional[list[str]] = None) -> str:
-    # PaddleOCR зависит от пакета paddle (PaddlePaddle), а не только paddleocr.
     import importlib.util
 
+    # PaddleOCR requires paddle (PaddlePaddle) + paddleocr.
     if importlib.util.find_spec("paddle") is None:
         raise OCRNotAvailable(
-            "PaddlePaddle не установлен (import paddle). Установите: pip install paddlepaddle. "
-            "Для CPU часто: pip install paddlepaddle -i https://www.paddlepaddle.org.cn/packages/stable/cpu/. "
-            "Официальные колёса могут отсутствовать для очень новых версий Python — используйте 3.10–3.12."
+            "PaddlePaddle is not installed (import paddle). Install paddlepaddle for your Python version, "
+            "then install paddleocr."
         )
-
-    os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
     _require_import("paddleocr")
+
     from paddleocr import PaddleOCR
     import numpy as np
 
     if languages is None:
         languages = ["en", "ru"]
 
-    # PaddleOCR accepts numpy arrays.
-    arr = np.asarray(img.convert("RGB"))
+    # PaddleOCR language selection is not fully multilingual by list.
+    lang = "ru" if any(l.lower().startswith("ru") for l in languages) else "en"
+    # Reduce noisy/slow connectivity checks on first import.
+    os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
+
     global _paddleocr_instance
     if _paddleocr_instance is None:
-        _paddleocr_instance = PaddleOCR(use_angle_cls=True, lang="en")
+        _paddleocr_instance = PaddleOCR(use_angle_cls=True, lang=lang, show_log=False, use_gpu=False)
     ocr = _paddleocr_instance
-    # Note: multilingual config depends on PaddleOCR build; we keep a simple default.
+
+    arr = np.asarray(img.convert("RGB"))
     results = ocr.ocr(arr, cls=True)
-    texts: list[str] = []
-    for line in results:
-        for _, (text, _conf) in line:
-            texts.append(text)
-    return "\n".join(texts)
+    return _extract_paddleocr_text(results)
 
 
 def ocr_trocr(img: Image.Image) -> str:
     global _trocr_cache
     _require_import("transformers")
     _require_import("torch")
-    from PIL import ImageOps
     import torch
+    try:
+        from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+    except ModuleNotFoundError as e:
+        # Some transformers installs pull optional deps lazily (e.g. soundfile/librosa).
+        raise OCRNotAvailable(f"TrOCR is not available due to missing optional dependency: {e}") from e
 
     if _trocr_cache is None:
-        # Меньше служебного вывода при загрузке весов.
         logging.getLogger("transformers").setLevel(logging.ERROR)
         logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
-        from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
         processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-printed")
         model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-printed")
         model.eval()
-        _trocr_cache = (processor, model)
 
-    processor, model = _trocr_cache
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model.to(device)
+        _trocr_cache = (processor, model, device)
 
-    img_gray = ImageOps.grayscale(img)
-    pixel_values = processor(images=img_gray, return_tensors="pt").pixel_values
+    processor, model, device = _trocr_cache
+
+    pixel_values = processor(images=img.convert("RGB"), return_tensors="pt").pixel_values.to(device)
     with torch.no_grad():
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             generated_ids = model.generate(pixel_values, max_new_tokens=256)
-    return processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    out = processor.batch_decode(generated_ids, skip_special_tokens=True)
+    return out[0] if out else ""
 
 
 ENGINE_RUNNERS: Dict[str, Callable[[Image.Image], str]] = {

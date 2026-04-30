@@ -105,7 +105,7 @@ def evaluate_ocr_engines(
     *,
     input_text: str,
     pipeline: AttackPipeline,
-    engines: Sequence[str] = ("tesseract", "trocr", "easyocr"),
+    engines: Sequence[str] = tuple(ENGINE_RUNNERS.keys()),
     reference_text: Optional[str] = None,
     output_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
