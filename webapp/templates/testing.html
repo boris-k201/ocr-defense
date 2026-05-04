@@ -30,6 +30,7 @@
         <div class="row">
           <label class="inline"><input type="checkbox" class="engine" value="tesseract" checked /> tesseract</label>
           <label class="inline"><input type="checkbox" class="engine" value="trocr" checked /> trocr</label>
+          <label class="inline"><input type="checkbox" class="engine" value="donut" checked /> donut</label>
           <label class="inline"><input type="checkbox" class="engine" value="easyocr" checked /> easyocr</label>
           <label class="inline"><input type="checkbox" class="engine" value="paddleocr" /> paddleocr</label>
         </div>
@@ -60,6 +61,7 @@
             <option value="semantic">semantic</option>
             <option value="diacritics">diacritics</option>
             <option value="image_patch">image_patch</option>
+            <option value="adv_docvqa">adv_docvqa</option>
             <option value="all" selected>all</option>
           </select>
         </label>
@@ -108,6 +110,48 @@
             <div class="formgrid">
               <label>max_patches_per_line <input id="ip_max_patches_per_line" type="number" value="1" min="0" /></label>
               <label>random_seed <input id="ip_random_seed" type="number" placeholder="(опционально)" /></label>
+            </div>
+          </div>
+
+          <div class="subcard">
+            <div class="row row--between">
+              <h3>Adv DocVQA</h3>
+              <label class="inline"><input id="adv_enabled" type="checkbox" /> Включить</label>
+            </div>
+            <div class="formgrid">
+              <label>model_name
+                <select id="adv_model_name">
+                  <option value="donut" selected>donut</option>
+                  <option value="pix2struct">pix2struct</option>
+                </select>
+              </label>
+              <label class="span2">checkpoint
+                <input id="adv_checkpoint" type="text" value="naver-clova-ix/donut-base-finetuned-docvqa" />
+              </label>
+              <label class="inline">local_files_only <input id="adv_local_files_only" type="checkbox" checked /></label>
+              <label>eps <input id="adv_eps" type="number" value="8.0" step="0.1" min="0" /></label>
+              <label>steps <input id="adv_steps" type="number" value="20" min="1" /></label>
+              <label>step_size <input id="adv_step_size" type="number" value="1.0" step="0.1" min="0" /></label>
+              <label>mask
+                <select id="adv_mask">
+                  <option value="include_all" selected>include_all</option>
+                  <option value="exclude_white">exclude_white</option>
+                  <option value="bottom_right_corner">bottom_right_corner</option>
+                </select>
+              </label>
+              <label>device
+                <select id="adv_device">
+                  <option value="cpu" selected>cpu</option>
+                  <option value="cuda">cuda</option>
+                </select>
+              </label>
+              <label class="inline">targeted <input id="adv_is_targeted" type="checkbox" checked /></label>
+              <label class="span2">questions (через `;`)
+                <input id="adv_questions" type="text" placeholder="What is the total?;What is invoice number?" />
+              </label>
+              <label class="span2">targets (через `;`, для targeted)
+                <input id="adv_targets" type="text" placeholder="$0.00;0" />
+              </label>
             </div>
           </div>
         </details>

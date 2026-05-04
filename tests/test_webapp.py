@@ -73,7 +73,7 @@ class TestWebApp(unittest.TestCase):
                 "render": {
                     "image_width": 100,
                     "image_height": 50,
-                    "margin": 30,
+                    "margin": 10,
                     "font_path": None,
                     "font_size": 20,
                     "dpi": 96,
@@ -88,6 +88,27 @@ class TestWebApp(unittest.TestCase):
         data = resp.json()
         self.assertIn("metrics", data)
         self.assertIn("tesseract", data["metrics"])
+
+    def test_build_attack_config_includes_adv_docvqa(self):
+        from webapp import app as web
+
+        adv = web.AdvancedAttackOptions(
+            adv_docvqa=web.AdvDocVQAOptions(
+                enabled=True,
+                model_name="pix2struct",
+                questions=["Q1"],
+                targets=["T1"],
+                eps=4.0,
+                steps=5,
+                step_size=1.0,
+                is_targeted=True,
+                mask="include_all",
+                device="cpu",
+            )
+        )
+        cfg = web._build_attack_config("adv_docvqa", adv)
+        self.assertIsNotNone(cfg.adv_docvqa)
+        self.assertEqual(cfg.adv_docvqa.model_name, "pix2struct")
 
 
 if __name__ == "__main__":

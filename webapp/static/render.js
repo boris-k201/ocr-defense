@@ -6,6 +6,12 @@ function numOrNull(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+function splitList(v) {
+  const s = (v || "").trim();
+  if (!s) return null;
+  return s.split(";").map(x => x.trim()).filter(Boolean);
+}
+
 function activeTab(tabName) {
   document.querySelectorAll(".tab").forEach(btn => {
     btn.classList.toggle("tab--active", btn.dataset.tab === tabName);
@@ -47,6 +53,20 @@ function buildPayload() {
         enabled: $("ip_enabled").checked,
         max_patches_per_line: Number($("ip_max_patches_per_line").value),
         random_seed: numOrNull($("ip_random_seed").value)
+      },
+      adv_docvqa: {
+        enabled: $("adv_enabled").checked,
+        model_name: $("adv_model_name").value,
+        checkpoint: $("adv_checkpoint").value.trim() || null,
+        local_files_only: $("adv_local_files_only").checked,
+        questions: splitList($("adv_questions").value),
+        targets: splitList($("adv_targets").value),
+        eps: Number($("adv_eps").value),
+        steps: Number($("adv_steps").value),
+        step_size: Number($("adv_step_size").value),
+        is_targeted: $("adv_is_targeted").checked,
+        mask: $("adv_mask").value,
+        device: $("adv_device").value
       },
       semantic_oracle_engine: $("sem_oracle_engine").value.trim() || null
     }

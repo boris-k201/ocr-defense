@@ -17,4 +17,4 @@ torch
 torchvision
 
 # PaddleOCR (requires paddlepaddle separately; see Dockerfile / README)
-paddleocr
+# paddleocr

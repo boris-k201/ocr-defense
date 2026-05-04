@@ -21,6 +21,7 @@ def _require_import(module_name: str) -> None:
 
 # Caches (evaluate calls engines twice: original + attacked).
 _trocr_cache: Optional[Tuple[Any, Any, str]] = None  # (processor, model, device)
+_donut_cache: Optional[Tuple[Any, Any, str]] = None  # (processor, model, device)
 _easyocr_readers: Dict[Tuple[str, ...], Any] = {}
 _paddleocr_instance: Optional[Any] = None
 
@@ -168,10 +169,70 @@ def ocr_trocr(img: Image.Image) -> str:
     return out[0] if out else ""
 
 
+def _extract_donut_answer(decoded: str) -> str:
+    text = decoded or ""
+    # Remove common wrapper tags, keep answer content if present.
+    if "<s_answer>" in text:
+        text = text.split("<s_answer>", 1)[1]
+    if "</s_answer>" in text:
+        text = text.split("</s_answer>", 1)[0]
+    # Remove generic special tokens.
+    text = text.replace("<s>", "").replace("</s>", "").strip()
+    return text
+
+
+def ocr_donut(img: Image.Image, *, checkpoint: str = "naver-clova-ix/donut-base-finetuned-docvqa") -> str:
+    global _donut_cache
+    _require_import("transformers")
+    _require_import("torch")
+    import torch
+    try:
+        from transformers import AutoProcessor, VisionEncoderDecoderModel
+    except ModuleNotFoundError as e:
+        raise OCRNotAvailable(f"Donut is not available due to missing optional dependency: {e}") from e
+
+    if _donut_cache is None:
+        logging.getLogger("transformers").setLevel(logging.ERROR)
+        logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
+
+        processor = AutoProcessor.from_pretrained(checkpoint)
+        model = VisionEncoderDecoderModel.from_pretrained(checkpoint)
+        model.eval()
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model.to(device)
+        _donut_cache = (processor, model, device)
+
+    processor, model, device = _donut_cache
+    pixel_values = processor(images=img.convert("RGB"), return_tensors="pt").pixel_values.to(device)
+
+    # Donut DocVQA uses prompt with question tag.
+    prompt = "<s_docvqa><s_question>What is written in the image?</s_question><s_answer>"
+    decoder_input_ids = processor.tokenizer(
+        prompt,
+        add_special_tokens=False,
+        return_tensors="pt",
+    ).input_ids.to(device)
+
+    with torch.no_grad():
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            generated_ids = model.generate(
+                pixel_values=pixel_values,
+                decoder_input_ids=decoder_input_ids,
+                max_new_tokens=256,
+            )
+    decoded = processor.batch_decode(generated_ids, skip_special_tokens=False)
+    if not decoded:
+        return ""
+    return _extract_donut_answer(decoded[0])
+
+
 ENGINE_RUNNERS: Dict[str, Callable[[Image.Image], str]] = {
     "tesseract": ocr_tesseract,
     "easyocr": ocr_easyocr,
     "paddleocr": ocr_paddleocr,
     "trocr": ocr_trocr,
+    "donut": ocr_donut,
 }
 

@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
 from ocr_defense.attacks.diacritics import DiacriticsAttackConfig
+from ocr_defense.attacks.adv_docvqa_attack import AdvDocVQAAttackConfig
 from ocr_defense.attacks.image_patch import ImagePatchAttackConfig
 from ocr_defense.attacks.semantic import SemanticAttackConfig
 from ocr_defense.evaluation import AttackConfig, AttackPipeline, evaluate_ocr_engines
@@ -25,7 +26,7 @@ app = FastAPI(title="OCR Defense Demo")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
-AttackName = Literal["none", "semantic", "diacritics", "image_patch", "all"]
+AttackName = Literal["none", "semantic", "diacritics", "image_patch", "adv_docvqa", "all"]
 
 
 class RenderOptions(BaseModel):
@@ -61,10 +62,27 @@ class ImagePatchOptions(BaseModel):
     random_seed: Optional[int] = None
 
 
+class AdvDocVQAOptions(BaseModel):
+    enabled: bool = False
+    model_name: str = "donut"
+    checkpoint: str = "naver-clova-ix/donut-base-finetuned-docvqa"
+    local_files_only: bool = True
+    # Comma-separated values in UI are normalized server-side.
+    questions: Optional[List[str]] = None
+    targets: Optional[List[str]] = None
+    eps: float = 8.0
+    steps: int = 20
+    step_size: float = 1.0
+    is_targeted: bool = True
+    mask: str = "include_all"
+    device: str = "cpu"
+
+
 class AdvancedAttackOptions(BaseModel):
     semantic: SemanticOptions = Field(default_factory=SemanticOptions)
     diacritics: DiacriticsOptions = Field(default_factory=DiacriticsOptions)
     image_patch: ImagePatchOptions = Field(default_factory=ImagePatchOptions)
+    adv_docvqa: AdvDocVQAOptions = Field(default_factory=AdvDocVQAOptions)
     semantic_oracle_engine: Optional[str] = None
 
 
@@ -77,7 +95,7 @@ class RenderRequest(BaseModel):
 
 class EvaluateRequest(BaseModel):
     text: str
-    engines: List[str] = Field(default_factory=lambda: ["tesseract", "trocr", "easyocr"])
+    engines: List[str] = Field(default_factory=lambda: ["tesseract", "trocr", "donut", "easyocr"])
     render: RenderOptions = Field(default_factory=RenderOptions)
     attack: AttackName = "all"
     advanced: AdvancedAttackOptions = Field(default_factory=AdvancedAttackOptions)
@@ -90,6 +108,7 @@ def _build_attack_config(attack: AttackName, adv: AdvancedAttackOptions) -> Atta
     semantic_cfg = None
     diacritics_cfg = None
     image_patch_cfg = None
+    adv_docvqa_cfg = None
 
     if attack in ("semantic", "all") and adv.semantic.enabled:
         semantic_cfg = SemanticAttackConfig(
@@ -110,11 +129,26 @@ def _build_attack_config(attack: AttackName, adv: AdvancedAttackOptions) -> Atta
             max_patches_per_line=adv.image_patch.max_patches_per_line,
             random_seed=adv.image_patch.random_seed,
         )
+    if attack in ("adv_docvqa", "all") and adv.adv_docvqa.enabled:
+        adv_docvqa_cfg = AdvDocVQAAttackConfig(
+            model_name=adv.adv_docvqa.model_name,
+            checkpoint=adv.adv_docvqa.checkpoint,
+            local_files_only=adv.adv_docvqa.local_files_only,
+            questions=adv.adv_docvqa.questions,
+            targets=adv.adv_docvqa.targets,
+            eps=adv.adv_docvqa.eps,
+            steps=adv.adv_docvqa.steps,
+            step_size=adv.adv_docvqa.step_size,
+            is_targeted=adv.adv_docvqa.is_targeted,
+            mask=adv.adv_docvqa.mask,
+            device=adv.adv_docvqa.device,
+        )
 
     return AttackConfig(
         semantic=semantic_cfg,
         diacritics=diacritics_cfg,
         image_patch=image_patch_cfg,
+        adv_docvqa=adv_docvqa_cfg,
         semantic_oracle_engine=adv.semantic_oracle_engine,
     )
 

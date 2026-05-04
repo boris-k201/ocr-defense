@@ -8,11 +8,12 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from PIL import Image
 
+from .attacks.adv_docvqa_attack import AdvDocVQAAttackConfig, adv_docvqa_attack
 from .attacks.diacritics import DiacriticsAttackConfig, diacritics_attack
 from .attacks.image_patch import ImagePatchAttackConfig, image_patch_attack
 from .attacks.semantic import SemanticAttackConfig, semantic_synonym_attack
 from .metrics import cer, normalize_text, wer
-from .ocr_engines import ENGINE_RUNNERS, OCRNotAvailable
+from .ocr_engines import ENGINE_RUNNERS
 from .render import FreeTypeRenderer, RenderConfig
 
 
@@ -23,6 +24,8 @@ class AttackConfig:
     diacritics: Optional[DiacriticsAttackConfig] = None
     # Image perturbation (operates on rendered image).
     image_patch: Optional[ImagePatchAttackConfig] = None
+    # DocVQA adversarial image perturbation (article 2512.04554v1).
+    adv_docvqa: Optional[AdvDocVQAAttackConfig] = None
 
     # Optional oracle mode for semantic GA (very expensive).
     # If set, semantic GA uses this OCR engine as fitness driver.
@@ -75,10 +78,7 @@ class AttackPipeline:
                 # Compute fitness as expected OCR "error" vs ground truth (WER).
                 with FreeTypeRenderer(self.render_config) as r:
                     img = r.render(candidate_text, x=0, y=0)
-                try:
-                    hyp = runner(img)
-                except OCRNotAvailable:
-                    return 0.0
+                hyp = runner(img)
                 # Higher is better: larger WER => more errors.
                 return wer(text, hyp)
 
@@ -98,6 +98,10 @@ class AttackPipeline:
                 )
                 meta["image_patch"] = {"effects": list(self.attack_config.image_patch.effects)}
 
+            if self.attack_config.adv_docvqa is not None:
+                img, adv_meta = adv_docvqa_attack(img, self.attack_config.adv_docvqa)
+                meta["adv_docvqa"] = adv_meta
+
             return img, attacked_text, meta
 
 
@@ -105,6 +109,7 @@ def evaluate_ocr_engines(
     *,
     input_text: str,
     pipeline: AttackPipeline,
+#    engines: Sequence[str] = ("tesseract", "trocr", "easyocr", "ocr_got"),
     engines: Sequence[str] = tuple(ENGINE_RUNNERS.keys()),
     reference_text: Optional[str] = None,
     output_path: Optional[Path] = None,
@@ -148,11 +153,6 @@ def evaluate_ocr_engines(
             ocr_time_original = time.perf_counter() - t_ocr0
             cer_o = cer(ref, hyp_original)
             wer_o = wer(ref, hyp_original)
-        except OCRNotAvailable as e:
-            engine_entry["skipped"] = True
-            engine_entry["error"] = str(e)
-            results["metrics"][engine_name] = engine_entry
-            continue
         except Exception as e:  # pragma: no cover - depends on external engines
             engine_entry["skipped"] = True
             engine_entry["error"] = f"{type(e).__name__}: {e}"
@@ -166,11 +166,6 @@ def evaluate_ocr_engines(
             ocr_time_attacked = time.perf_counter() - t_ocr1
             cer_a = cer(ref, hyp_attacked)
             wer_a = wer(ref, hyp_attacked)
-        except OCRNotAvailable as e:
-            engine_entry["skipped"] = True
-            engine_entry["error_attacked"] = str(e)
-            results["metrics"][engine_name] = engine_entry
-            continue
         except Exception as e:  # pragma: no cover
             engine_entry["skipped"] = True
             engine_entry["error_attacked"] = f"{type(e).__name__}: {e}"
