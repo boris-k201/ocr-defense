@@ -54,6 +54,36 @@ function buildPayload() {
         max_patches_per_line: Number($("ip_max_patches_per_line").value),
         random_seed: numOrNull($("ip_random_seed").value)
       },
+      watermark: {
+        enabled: $("wm_enabled").checked,
+        text_lines: splitList($("wm_text_lines").value),
+        color: $("wm_color").value,
+        alpha: Number($("wm_alpha").value),
+        font_path: $("wm_font_path").value.trim() || null,
+        font_size: Number($("wm_font_size").value),
+        x_spacing: Number($("wm_x_spacing").value),
+        y_spacing: Number($("wm_y_spacing").value),
+        angle_deg: Number($("wm_angle_deg").value),
+        x_offset: Number($("wm_x_offset").value),
+        y_offset: Number($("wm_y_offset").value)
+      },
+      distortions: {
+        enabled: $("dist_enabled").checked,
+        enable_skew: $("dist_enable_skew").checked,
+        enable_rotate: $("dist_enable_rotate").checked,
+        enable_warp: $("dist_enable_warp").checked,
+        enable_strikethrough: $("dist_enable_strikethrough").checked,
+        character_distort_probability: Number($("dist_char_prob").value),
+        skew_degrees: Number($("dist_skew_degrees").value),
+        rotate_degrees: Number($("dist_rotate_degrees").value),
+        warp_probability: Number($("dist_warp_probability").value),
+        warp_amplitude: Number($("dist_warp_amplitude").value),
+        warp_frequency: Number($("dist_warp_frequency").value),
+        strikethrough_probability: Number($("dist_strike_probability").value),
+        strikethrough_width: Number($("dist_strike_width").value),
+        strikethrough_color: $("dist_strike_color").value,
+        random_seed: numOrNull($("dist_random_seed").value)
+      },
       adv_docvqa: {
         enabled: $("adv_enabled").checked,
         model_name: $("adv_model_name").value,

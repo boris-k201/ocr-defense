@@ -1,8 +1,10 @@
 import unittest
 
 from ocr_defense.attacks.diacritics import DiacriticsAttackConfig, diacritics_attack
+from ocr_defense.attacks.distortions import DistortionsAttackConfig, distortions_attack
 from ocr_defense.attacks.image_patch import ImagePatchAttackConfig, image_patch_attack
 from ocr_defense.attacks.semantic import SemanticAttackConfig, semantic_synonym_attack
+from ocr_defense.attacks.watermark import WatermarkAttackConfig, watermark_attack
 from ocr_defense.render import FreeTypeRenderer, RenderConfig
 
 
@@ -56,6 +58,59 @@ class TestAttacks(unittest.TestCase):
             if img.getpixel((x, y)) != attacked.getpixel((x, y))
         )
         self.assertGreater(diff, 0)
+
+    def test_watermark_attack_modifies_image(self):
+        render_cfg = RenderConfig(image_width=320, image_height=120, font_size=22)
+        with FreeTypeRenderer(render_cfg) as renderer:
+            text = "Watermark test"
+            img = renderer.render(text, x=0, y=0, record_line_bboxes=False)
+
+        attacked = watermark_attack(
+            img,
+            WatermarkAttackConfig(
+                text_lines=("CONFIDENTIAL", "OCR DEFENSE"),
+                alpha=120,
+                font_size=20,
+                x_spacing=120,
+                y_spacing=80,
+                angle_deg=-12.0,
+            ),
+        )
+        diff = sum(
+            1
+            for y in range(img.height)
+            for x in range(img.width)
+            if img.getpixel((x, y)) != attacked.getpixel((x, y))
+        )
+        self.assertGreater(diff, 0)
+
+    def test_distortions_attack_strikethrough_changes_image(self):
+        render_cfg = RenderConfig(image_width=360, image_height=140, font_size=24)
+        text = "word one\ntwo words"
+        with FreeTypeRenderer(render_cfg) as renderer:
+            img, bboxes = renderer.render(text, x=0, y=0, record_line_bboxes=True)
+
+        attacked, meta = distortions_attack(
+            img,
+            text=text,
+            line_bboxes=bboxes,
+            config=DistortionsAttackConfig(
+                enable_skew=False,
+                enable_rotate=False,
+                enable_warp=False,
+                enable_strikethrough=True,
+                strikethrough_probability=1.0,
+                random_seed=7,
+            ),
+        )
+        diff = sum(
+            1
+            for y in range(img.height)
+            for x in range(img.width)
+            if img.getpixel((x, y)) != attacked.getpixel((x, y))
+        )
+        self.assertGreater(diff, 0)
+        self.assertGreater(meta["words_struck"], 0)
 
 
 if __name__ == "__main__":

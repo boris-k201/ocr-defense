@@ -61,6 +61,8 @@
               <option value="semantic">semantic</option>
               <option value="diacritics">diacritics</option>
               <option value="image_patch">image_patch</option>
+              <option value="watermark">watermark</option>
+              <option value="distortions">distortions</option>
               <option value="adv_docvqa">adv_docvqa</option>
               <option value="all">all</option>
             </select>
@@ -154,6 +156,52 @@
               <label class="span2">targets (через `;`, для targeted)
                 <input id="adv_targets" type="text" placeholder="$0.00;0" />
               </label>
+            </div>
+          </div>
+
+          <div class="subcard">
+            <div class="row row--between">
+              <h3>Watermark</h3>
+              <label class="inline"><input id="wm_enabled" type="checkbox"/> Включить</label>
+            </div>
+            <div class="formgrid">
+              <label class="span2">text lines (через `;`)
+                <input id="wm_text_lines" type="text" value="CONFIDENTIAL;OCR DEFENSE" />
+              </label>
+              <label>color <input id="wm_color" type="color" value="#606060" /></label>
+              <label>alpha (0-255) <input id="wm_alpha" type="number" value="80" min="0" max="255" /></label>
+              <label>font_size <input id="wm_font_size" type="number" value="24" min="8" /></label>
+              <label>x_spacing <input id="wm_x_spacing" type="number" value="160" min="20" /></label>
+              <label>y_spacing <input id="wm_y_spacing" type="number" value="120" min="20" /></label>
+              <label>angle_deg <input id="wm_angle_deg" type="number" value="-18" step="0.5" /></label>
+              <label>x_offset <input id="wm_x_offset" type="number" value="0" /></label>
+              <label>y_offset <input id="wm_y_offset" type="number" value="0" /></label>
+              <label class="span2">font_path (опционально)
+                <input id="wm_font_path" type="text" placeholder="например: fonts/PT_Sans/PTSans-Regular.ttf" />
+              </label>
+            </div>
+          </div>
+
+          <div class="subcard">
+            <div class="row row--between">
+              <h3>Distortions</h3>
+              <label class="inline"><input id="dist_enabled" type="checkbox"/> Включить</label>
+            </div>
+            <div class="formgrid">
+              <label class="inline">skew <input id="dist_enable_skew" type="checkbox" checked /></label>
+              <label class="inline">rotate <input id="dist_enable_rotate" type="checkbox" checked /></label>
+              <label class="inline">warp <input id="dist_enable_warp" type="checkbox" checked /></label>
+              <label class="inline">strikethrough <input id="dist_enable_strikethrough" type="checkbox" checked /></label>
+              <label>character_distort_probability <input id="dist_char_prob" type="number" value="0.18" min="0" max="1" step="0.01" /></label>
+              <label>skew_degrees <input id="dist_skew_degrees" type="number" value="10" min="0" step="0.5" /></label>
+              <label>rotate_degrees <input id="dist_rotate_degrees" type="number" value="9" min="0" step="0.5" /></label>
+              <label>warp_probability <input id="dist_warp_probability" type="number" value="1.0" min="0" max="1" step="0.01" /></label>
+              <label>warp_amplitude <input id="dist_warp_amplitude" type="number" value="2.0" min="0" step="0.2" /></label>
+              <label>warp_frequency <input id="dist_warp_frequency" type="number" value="0.06" min="0" step="0.01" /></label>
+              <label>strikethrough_probability <input id="dist_strike_probability" type="number" value="0.45" min="0" max="1" step="0.01" /></label>
+              <label>strikethrough_width <input id="dist_strike_width" type="number" value="2" min="1" /></label>
+              <label>strikethrough_color <input id="dist_strike_color" type="color" value="#202020" /></label>
+              <label>random_seed <input id="dist_random_seed" type="number" placeholder="(опционально)" /></label>
             </div>
           </div>
         </div>

@@ -10,8 +10,10 @@ from PIL import Image
 
 from .attacks.adv_docvqa_attack import AdvDocVQAAttackConfig, adv_docvqa_attack
 from .attacks.diacritics import DiacriticsAttackConfig, diacritics_attack
+from .attacks.distortions import DistortionsAttackConfig, distortions_attack
 from .attacks.image_patch import ImagePatchAttackConfig, image_patch_attack
 from .attacks.semantic import SemanticAttackConfig, semantic_synonym_attack
+from .attacks.watermark import WatermarkAttackConfig, watermark_attack
 from .metrics import cer, normalize_text, wer
 from .ocr_engines import ENGINE_RUNNERS
 from .render import FreeTypeRenderer, RenderConfig
@@ -24,6 +26,8 @@ class AttackConfig:
     diacritics: Optional[DiacriticsAttackConfig] = None
     # Image perturbation (operates on rendered image).
     image_patch: Optional[ImagePatchAttackConfig] = None
+    watermark: Optional[WatermarkAttackConfig] = None
+    distortions: Optional[DistortionsAttackConfig] = None
     # DocVQA adversarial image perturbation (article 2512.04554v1).
     adv_docvqa: Optional[AdvDocVQAAttackConfig] = None
 
@@ -97,6 +101,22 @@ class AttackPipeline:
                     config=self.attack_config.image_patch,
                 )
                 meta["image_patch"] = {"effects": list(self.attack_config.image_patch.effects)}
+
+            if self.attack_config.watermark is not None:
+                img = watermark_attack(img, self.attack_config.watermark)
+                meta["watermark"] = {
+                    "text_lines": list(self.attack_config.watermark.text_lines),
+                    "alpha": self.attack_config.watermark.alpha,
+                }
+
+            if self.attack_config.distortions is not None and line_bboxes is not None:
+                img, dmeta = distortions_attack(
+                    img,
+                    text=attacked_text,
+                    line_bboxes=line_bboxes,
+                    config=self.attack_config.distortions,
+                )
+                meta["distortions"] = dmeta
 
             if self.attack_config.adv_docvqa is not None:
                 img, adv_meta = adv_docvqa_attack(img, self.attack_config.adv_docvqa)

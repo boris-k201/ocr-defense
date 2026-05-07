@@ -14,7 +14,9 @@ from pydantic import BaseModel, Field
 from ocr_defense.attacks.diacritics import DiacriticsAttackConfig
 from ocr_defense.attacks.adv_docvqa_attack import AdvDocVQAAttackConfig
 from ocr_defense.attacks.image_patch import ImagePatchAttackConfig
+from ocr_defense.attacks.distortions import DistortionsAttackConfig
 from ocr_defense.attacks.semantic import SemanticAttackConfig
+from ocr_defense.attacks.watermark import WatermarkAttackConfig
 from ocr_defense.evaluation import AttackConfig, AttackPipeline, evaluate_ocr_engines
 from ocr_defense.render import RenderConfig
 
@@ -26,7 +28,7 @@ app = FastAPI(title="OCR Defense Demo")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
-AttackName = Literal["none", "semantic", "diacritics", "image_patch", "adv_docvqa", "all"]
+AttackName = Literal["none", "semantic", "diacritics", "image_patch", "watermark", "distortions", "adv_docvqa", "all"]
 
 
 class RenderOptions(BaseModel):
@@ -78,10 +80,44 @@ class AdvDocVQAOptions(BaseModel):
     device: str = "cpu"
 
 
+class WatermarkOptions(BaseModel):
+    enabled: bool = False
+    text_lines: Optional[List[str]] = None
+    color: str = "#606060"
+    alpha: int = 80
+    font_path: Optional[str] = None
+    font_size: int = 24
+    x_spacing: int = 160
+    y_spacing: int = 120
+    angle_deg: float = -18.0
+    x_offset: int = 0
+    y_offset: int = 0
+
+
+class DistortionsOptions(BaseModel):
+    enabled: bool = False
+    enable_skew: bool = True
+    enable_rotate: bool = True
+    enable_warp: bool = True
+    enable_strikethrough: bool = True
+    character_distort_probability: float = 0.18
+    skew_degrees: float = 10.0
+    rotate_degrees: float = 9.0
+    warp_probability: float = 1.0
+    warp_amplitude: float = 2.0
+    warp_frequency: float = 0.06
+    strikethrough_probability: float = 0.45
+    strikethrough_width: int = 2
+    strikethrough_color: str = "#202020"
+    random_seed: Optional[int] = None
+
+
 class AdvancedAttackOptions(BaseModel):
     semantic: SemanticOptions = Field(default_factory=SemanticOptions)
     diacritics: DiacriticsOptions = Field(default_factory=DiacriticsOptions)
     image_patch: ImagePatchOptions = Field(default_factory=ImagePatchOptions)
+    watermark: WatermarkOptions = Field(default_factory=WatermarkOptions)
+    distortions: DistortionsOptions = Field(default_factory=DistortionsOptions)
     adv_docvqa: AdvDocVQAOptions = Field(default_factory=AdvDocVQAOptions)
     semantic_oracle_engine: Optional[str] = None
 
@@ -108,6 +144,8 @@ def _build_attack_config(attack: AttackName, adv: AdvancedAttackOptions) -> Atta
     semantic_cfg = None
     diacritics_cfg = None
     image_patch_cfg = None
+    watermark_cfg = None
+    distortions_cfg = None
     adv_docvqa_cfg = None
 
     if attack in ("semantic", "all") and adv.semantic.enabled:
@@ -129,6 +167,36 @@ def _build_attack_config(attack: AttackName, adv: AdvancedAttackOptions) -> Atta
             max_patches_per_line=adv.image_patch.max_patches_per_line,
             random_seed=adv.image_patch.random_seed,
         )
+    if attack in ("watermark", "all") and adv.watermark.enabled:
+        watermark_cfg = WatermarkAttackConfig(
+            text_lines=tuple(adv.watermark.text_lines) if adv.watermark.text_lines else ("CONFIDENTIAL",),
+            color=adv.watermark.color,
+            alpha=adv.watermark.alpha,
+            font_path=adv.watermark.font_path,
+            font_size=adv.watermark.font_size,
+            x_spacing=adv.watermark.x_spacing,
+            y_spacing=adv.watermark.y_spacing,
+            angle_deg=adv.watermark.angle_deg,
+            x_offset=adv.watermark.x_offset,
+            y_offset=adv.watermark.y_offset,
+        )
+    if attack in ("distortions", "all") and adv.distortions.enabled:
+        distortions_cfg = DistortionsAttackConfig(
+            enable_skew=adv.distortions.enable_skew,
+            enable_rotate=adv.distortions.enable_rotate,
+            enable_warp=adv.distortions.enable_warp,
+            enable_strikethrough=adv.distortions.enable_strikethrough,
+            character_distort_probability=adv.distortions.character_distort_probability,
+            skew_degrees=adv.distortions.skew_degrees,
+            rotate_degrees=adv.distortions.rotate_degrees,
+            warp_probability=adv.distortions.warp_probability,
+            warp_amplitude=adv.distortions.warp_amplitude,
+            warp_frequency=adv.distortions.warp_frequency,
+            strikethrough_probability=adv.distortions.strikethrough_probability,
+            strikethrough_width=adv.distortions.strikethrough_width,
+            strikethrough_color=adv.distortions.strikethrough_color,
+            random_seed=adv.distortions.random_seed,
+        )
     if attack in ("adv_docvqa", "all") and adv.adv_docvqa.enabled:
         adv_docvqa_cfg = AdvDocVQAAttackConfig(
             model_name=adv.adv_docvqa.model_name,
@@ -148,6 +216,8 @@ def _build_attack_config(attack: AttackName, adv: AdvancedAttackOptions) -> Atta
         semantic=semantic_cfg,
         diacritics=diacritics_cfg,
         image_patch=image_patch_cfg,
+        watermark=watermark_cfg,
+        distortions=distortions_cfg,
         adv_docvqa=adv_docvqa_cfg,
         semantic_oracle_engine=adv.semantic_oracle_engine,
     )

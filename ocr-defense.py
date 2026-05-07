@@ -13,8 +13,10 @@ os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 
 from ocr_defense.attacks.diacritics import DiacriticsAttackConfig
 from ocr_defense.attacks.adv_docvqa_attack import AdvDocVQAAttackConfig
+from ocr_defense.attacks.distortions import DistortionsAttackConfig
 from ocr_defense.attacks.image_patch import ImagePatchAttackConfig
 from ocr_defense.attacks.semantic import SemanticAttackConfig
+from ocr_defense.attacks.watermark import WatermarkAttackConfig
 from ocr_defense.evaluation import AttackConfig, AttackPipeline, evaluate_ocr_engines
 from ocr_defense.ocr_engines import ENGINE_RUNNERS
 from ocr_defense.render import FreeTypeRenderer, load_render_config
@@ -31,6 +33,8 @@ def build_attack_config(attack: str, *, random_seed: Optional[int]) -> AttackCon
     semantic_cfg = None
     diacritics_cfg = None
     image_patch_cfg = None
+    watermark_cfg = None
+    distortions_cfg = None
     adv_docvqa_cfg = None
     if attack in ("semantic", "all"):
         semantic_cfg = SemanticAttackConfig(
@@ -51,6 +55,10 @@ def build_attack_config(attack: str, *, random_seed: Optional[int]) -> AttackCon
             max_patches_per_line=1,
             random_seed=random_seed,
         )
+    if attack in ("watermark", "all"):
+        watermark_cfg = WatermarkAttackConfig()
+    if attack in ("distortions", "all"):
+        distortions_cfg = DistortionsAttackConfig(random_seed=random_seed)
     if attack in ("adv_docvqa", "all"):
         adv_docvqa_cfg = AdvDocVQAAttackConfig(
             model_name="donut",
@@ -61,6 +69,8 @@ def build_attack_config(attack: str, *, random_seed: Optional[int]) -> AttackCon
         semantic=semantic_cfg,
         diacritics=diacritics_cfg,
         image_patch=image_patch_cfg,
+        watermark=watermark_cfg,
+        distortions=distortions_cfg,
         adv_docvqa=adv_docvqa_cfg,
     )
 
@@ -74,8 +84,8 @@ def init_def_subparser(def_subparser):
     def_subparser.add_argument(
         "--attack", "-a",
         default="none",
-        choices=["none", "semantic", "diacritics", "image_patch", "adv_docvqa", "all"],
-        help="Тип защитных возмущений: semantic, diacritics, image_patch, adv_docvqa или all (комбинация)",
+        choices=["none", "semantic", "diacritics", "image_patch", "watermark", "distortions", "adv_docvqa", "all"],
+        help="Тип защитных возмущений: semantic, diacritics, image_patch, watermark, distortions, adv_docvqa или all (комбинация)",
     )
     def_subparser.add_argument(
         "--random-seed", "-r",
@@ -101,7 +111,7 @@ def init_eval_subparser(eval_subparser):
     eval_subparser.add_argument(
         "--attack", "-a",
         default="all",
-        choices=["none", "semantic", "diacritics", "image_patch", "adv_docvqa", "all"],
+        choices=["none", "semantic", "diacritics", "image_patch", "watermark", "distortions", "adv_docvqa", "all"],
         help="Тип(ы) возмущений",
     )
 
@@ -140,6 +150,8 @@ def eval_mode(args):
     semantic_cfg = None
     diacritics_cfg = None
     image_patch_cfg = None
+    watermark_cfg = None
+    distortions_cfg = None
     adv_docvqa_cfg = None
 
     if args.attack in ("semantic", "all"):
@@ -148,6 +160,10 @@ def eval_mode(args):
         diacritics_cfg = DiacriticsAttackConfig(budget_per_word=5, diacritics_probability=0.6)
     if args.attack in ("image_patch", "all"):
         image_patch_cfg = ImagePatchAttackConfig(max_patches_per_line=1)
+    if args.attack in ("watermark", "all"):
+        watermark_cfg = WatermarkAttackConfig()
+    if args.attack in ("distortions", "all"):
+        distortions_cfg = DistortionsAttackConfig()
     if args.attack in ("adv_docvqa", "all"):
         adv_docvqa_cfg = AdvDocVQAAttackConfig(
             model_name="donut",
@@ -159,6 +175,8 @@ def eval_mode(args):
         semantic=semantic_cfg,
         diacritics=diacritics_cfg,
         image_patch=image_patch_cfg,
+        watermark=watermark_cfg,
+        distortions=distortions_cfg,
         adv_docvqa=adv_docvqa_cfg,
     )
     pipeline = AttackPipeline(render_config=render_config, attack_config=attack_config)

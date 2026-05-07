@@ -111,7 +111,7 @@ def semantic_synonym_attack(
                 # Gene 0 means keep original; genes 1..k are synonym options.
                 candidate_synonyms.append([part] + syns)
 
-    if len(word_positions < 2):
+    if len(word_positions) < 2:
         return text, {"changed_words": 0, "language": language, "ga_used": True}
 
     n = len(word_positions)
