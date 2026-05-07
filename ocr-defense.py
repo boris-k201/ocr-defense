@@ -1,8 +1,9 @@
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 # До импорта Paddle: отключить проверку доступности хостов моделей (шум и задержка).
 os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
@@ -19,7 +20,7 @@ from ocr_defense.attacks.semantic import SemanticAttackConfig
 from ocr_defense.attacks.watermark import WatermarkAttackConfig
 from ocr_defense.evaluation import AttackConfig, AttackPipeline, evaluate_ocr_engines
 from ocr_defense.ocr_engines import ENGINE_RUNNERS
-from ocr_defense.render import FreeTypeRenderer, load_render_config
+from ocr_defense.render import DEFAULT_RENDER_CONFIG, FreeTypeRenderer, RenderConfig
 
 def read_text(text_path: str) -> str:
     if text_path == "-":
@@ -29,7 +30,130 @@ def read_text(text_path: str) -> str:
         raise FileNotFoundError(str(input_path))
     return input_path.read_text(encoding="utf-8")
 
-def build_attack_config(attack: str, *, random_seed: Optional[int]) -> AttackConfig:
+def _tuple2(value: Any, default: tuple[float, float]) -> tuple[float, float]:
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        return (float(value[0]), float(value[1]))
+    return default
+
+def _tuple_str(value: Any, default: tuple[str, ...]) -> tuple[str, ...]:
+    if isinstance(value, (list, tuple)):
+        items = tuple(str(v) for v in value if str(v).strip())
+        return items if items else default
+    return default
+
+def load_app_config(config_path: Path) -> Dict[str, Any]:
+    defaults: Dict[str, Any] = {
+        "render": {
+            "image_width": DEFAULT_RENDER_CONFIG.image_width,
+            "image_height": DEFAULT_RENDER_CONFIG.image_height,
+            "margin": DEFAULT_RENDER_CONFIG.margin,
+            "font_path": DEFAULT_RENDER_CONFIG.font_path,
+            "font_size": DEFAULT_RENDER_CONFIG.font_size,
+            "dpi": DEFAULT_RENDER_CONFIG.dpi,
+            "text_color": DEFAULT_RENDER_CONFIG.text_color,
+            "background_color": DEFAULT_RENDER_CONFIG.background_color,
+        },
+        "attack": {
+            "semantic": {
+                "language": "auto",
+                "max_changed_words": 3,
+                "population_size": 24,
+                "generations": 18,
+                "tournament_k": 3,
+                "mutation_rate": 0.15,
+                "crossover_rate": 0.7,
+                "random_seed": None,
+            },
+            "diacritics": {
+                "budget_per_word": 5,
+                "diacritics_probability": 0.6,
+                "random_seed": None,
+            },
+            "image_patch": {
+                "max_patches_per_line": 1,
+                "patch_width_ratio": [0.2, 0.6],
+                "patch_height_ratio": [0.2, 0.7],
+                "pixel_value_min": 40,
+                "pixel_value_max": 220,
+                "pixel_fill_mode": "random",
+                "effects": ["bbox", "pixel", "text"],
+                "text_charset": "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+                "patch_text_length_range": [3, 8],
+                "patch_font_size": None,
+                "random_seed": None,
+            },
+            "watermark": {
+                "text_lines": ["CONFIDENTIAL"],
+                "color": "#606060",
+                "alpha": 80,
+                "font_path": None,
+                "font_size": 24,
+                "x_spacing": 160,
+                "y_spacing": 120,
+                "angle_deg": -18.0,
+                "x_offset": 0,
+                "y_offset": 0,
+            },
+            "distortions": {
+                "enable_skew": True,
+                "enable_rotate": True,
+                "enable_warp": True,
+                "enable_strikethrough": True,
+                "character_distort_probability": 0.18,
+                "skew_degrees": 10.0,
+                "rotate_degrees": 9.0,
+                "warp_probability": 1.0,
+                "warp_amplitude": 2.0,
+                "warp_frequency": 0.06,
+                "strikethrough_probability": 0.45,
+                "strikethrough_width": 2,
+                "strikethrough_color": "#202020",
+                "random_seed": None,
+            },
+            "adv_docvqa": {
+                "model_name": "donut",
+                "checkpoint": "naver-clova-ix/donut-base-finetuned-docvqa",
+                "local_files_only": True,
+                "questions": None,
+                "targets": None,
+                "eps": 8.0,
+                "steps": 20,
+                "step_size": 1.0,
+                "is_targeted": True,
+                "mask": "include_all",
+                "device": "cpu",
+            },
+        },
+    }
+    if not config_path.exists():
+        return defaults
+    with open(config_path, "r", encoding="utf-8") as f:
+        user_cfg = json.load(f)
+    render_cfg = defaults["render"] | dict(user_cfg.get("render", {}))
+    attack_cfg: Dict[str, Any] = {}
+    user_attack = dict(user_cfg.get("attack", {}))
+    for key, val in defaults["attack"].items():
+        attack_cfg[key] = dict(val) | dict(user_attack.get(key, {}))
+    return {"render": render_cfg, "attack": attack_cfg}
+
+def build_render_config(cfg: Dict[str, Any]) -> RenderConfig:
+    return RenderConfig(
+        image_width=int(cfg.get("image_width", DEFAULT_RENDER_CONFIG.image_width)),
+        image_height=int(cfg.get("image_height", DEFAULT_RENDER_CONFIG.image_height)),
+        margin=int(cfg.get("margin", DEFAULT_RENDER_CONFIG.margin)),
+        font_path=cfg.get("font_path", DEFAULT_RENDER_CONFIG.font_path),
+        font_size=int(cfg.get("font_size", DEFAULT_RENDER_CONFIG.font_size)),
+        dpi=int(cfg.get("dpi", DEFAULT_RENDER_CONFIG.dpi)),
+        text_color=cfg.get("text_color", DEFAULT_RENDER_CONFIG.text_color),
+        background_color=cfg.get("background_color", DEFAULT_RENDER_CONFIG.background_color),
+    )
+
+def build_attack_config(
+    attack: str,
+    *,
+    attack_section: Dict[str, Any],
+    random_seed: Optional[int],
+) -> AttackConfig:
     semantic_cfg = None
     diacritics_cfg = None
     image_patch_cfg = None
@@ -37,33 +161,88 @@ def build_attack_config(attack: str, *, random_seed: Optional[int]) -> AttackCon
     distortions_cfg = None
     adv_docvqa_cfg = None
     if attack in ("semantic", "all"):
+        sem = dict(attack_section.get("semantic", {}))
         semantic_cfg = SemanticAttackConfig(
-            language="auto",
-            max_changed_words=3,
-            population_size=24,
-            generations=18,
-            random_seed=random_seed,
+            language=str(sem.get("language", "auto")),
+            max_changed_words=int(sem.get("max_changed_words", 3)),
+            population_size=int(sem.get("population_size", 24)),
+            generations=int(sem.get("generations", 18)),
+            tournament_k=int(sem.get("tournament_k", 3)),
+            mutation_rate=float(sem.get("mutation_rate", 0.15)),
+            crossover_rate=float(sem.get("crossover_rate", 0.7)),
+            random_seed=random_seed if random_seed is not None else sem.get("random_seed"),
         )
     if attack in ("diacritics", "all"):
+        dia = dict(attack_section.get("diacritics", {}))
         diacritics_cfg = DiacriticsAttackConfig(
-            budget_per_word=5,
-            diacritics_probability=0.6,
-            random_seed=random_seed,
+            budget_per_word=int(dia.get("budget_per_word", 5)),
+            diacritics_probability=float(dia.get("diacritics_probability", 0.6)),
+            random_seed=random_seed if random_seed is not None else dia.get("random_seed"),
         )
     if attack in ("image_patch", "all"):
+        ip = dict(attack_section.get("image_patch", {}))
         image_patch_cfg = ImagePatchAttackConfig(
-            max_patches_per_line=1,
-            random_seed=random_seed,
+            max_patches_per_line=int(ip.get("max_patches_per_line", 1)),
+            patch_width_ratio=_tuple2(ip.get("patch_width_ratio"), (0.2, 0.6)),
+            patch_height_ratio=_tuple2(ip.get("patch_height_ratio"), (0.2, 0.7)),
+            pixel_value_min=int(ip.get("pixel_value_min", 40)),
+            pixel_value_max=int(ip.get("pixel_value_max", 220)),
+            pixel_fill_mode=str(ip.get("pixel_fill_mode", "random")),
+            effects=_tuple_str(ip.get("effects"), ("bbox", "pixel", "text")),
+            text_charset=str(ip.get("text_charset", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")),
+            patch_text_length_range=(
+                int(_tuple2(ip.get("patch_text_length_range"), (3, 8))[0]),
+                int(_tuple2(ip.get("patch_text_length_range"), (3, 8))[1]),
+            ),
+            patch_font_size=ip.get("patch_font_size"),
+            random_seed=random_seed if random_seed is not None else ip.get("random_seed"),
         )
     if attack in ("watermark", "all"):
-        watermark_cfg = WatermarkAttackConfig()
+        wm = dict(attack_section.get("watermark", {}))
+        watermark_cfg = WatermarkAttackConfig(
+            text_lines=tuple(wm.get("text_lines", ["CONFIDENTIAL"])),
+            color=wm.get("color", "#606060"),
+            alpha=int(wm.get("alpha", 80)),
+            font_path=wm.get("font_path"),
+            font_size=int(wm.get("font_size", 24)),
+            x_spacing=int(wm.get("x_spacing", 160)),
+            y_spacing=int(wm.get("y_spacing", 120)),
+            angle_deg=float(wm.get("angle_deg", -18.0)),
+            x_offset=int(wm.get("x_offset", 0)),
+            y_offset=int(wm.get("y_offset", 0)),
+        )
     if attack in ("distortions", "all"):
-        distortions_cfg = DistortionsAttackConfig(random_seed=random_seed)
+        dist = dict(attack_section.get("distortions", {}))
+        distortions_cfg = DistortionsAttackConfig(
+            enable_skew=bool(dist.get("enable_skew", True)),
+            enable_rotate=bool(dist.get("enable_rotate", True)),
+            enable_warp=bool(dist.get("enable_warp", True)),
+            enable_strikethrough=bool(dist.get("enable_strikethrough", True)),
+            character_distort_probability=float(dist.get("character_distort_probability", 0.18)),
+            skew_degrees=float(dist.get("skew_degrees", 10.0)),
+            rotate_degrees=float(dist.get("rotate_degrees", 9.0)),
+            warp_probability=float(dist.get("warp_probability", 1.0)),
+            warp_amplitude=float(dist.get("warp_amplitude", 2.0)),
+            warp_frequency=float(dist.get("warp_frequency", 0.06)),
+            strikethrough_probability=float(dist.get("strikethrough_probability", 0.45)),
+            strikethrough_width=int(dist.get("strikethrough_width", 2)),
+            strikethrough_color=dist.get("strikethrough_color", "#202020"),
+            random_seed=random_seed if random_seed is not None else dist.get("random_seed"),
+        )
     if attack in ("adv_docvqa", "all"):
+        adv = dict(attack_section.get("adv_docvqa", {}))
         adv_docvqa_cfg = AdvDocVQAAttackConfig(
-            model_name="donut",
-            checkpoint="naver-clova-ix/donut-base-finetuned-docvqa",
-            local_files_only=True,
+            model_name=str(adv.get("model_name", "donut")),
+            checkpoint=adv.get("checkpoint", "naver-clova-ix/donut-base-finetuned-docvqa"),
+            local_files_only=bool(adv.get("local_files_only", True)),
+            questions=adv.get("questions"),
+            targets=adv.get("targets"),
+            eps=float(adv.get("eps", 8.0)),
+            steps=int(adv.get("steps", 20)),
+            step_size=float(adv.get("step_size", 1.0)),
+            is_targeted=bool(adv.get("is_targeted", True)),
+            mask=str(adv.get("mask", "include_all")),
+            device=str(adv.get("device", "cpu")),
         )
     return AttackConfig(
         semantic=semantic_cfg,
@@ -120,7 +299,8 @@ def def_mode(args):
     config_path = Path(args.config)
     if args.verbose and not config_path.exists():
         print(f"Файл конфигурации '{config_path}' не найден, используются значения по умолчанию.", file=sys.stderr)
-    render_config = load_render_config(config_path)
+    cfg = load_app_config(config_path)
+    render_config = build_render_config(cfg.get("render", {}))
 
     # чтение текста
     text = read_text(args.input)
@@ -130,7 +310,11 @@ def def_mode(args):
         with FreeTypeRenderer(render_config) as renderer:
             image = renderer.render(text, x=0, y=0, record_line_bboxes=False)
     else:
-        attack_config = build_attack_config(args.attack, random_seed=args.random_seed)
+        attack_config = build_attack_config(
+            args.attack,
+            attack_section=cfg.get("attack", {}),
+            random_seed=args.random_seed,
+        )
         pipeline = AttackPipeline(render_config=render_config, attack_config=attack_config)
         image, attacked_text, meta = pipeline.render_attacked(text)
         if args.verbose:
@@ -144,40 +328,13 @@ def def_mode(args):
 
 def eval_mode(args):
     config_path = Path(args.config)
-    render_config = load_render_config(config_path)
+    cfg = load_app_config(config_path)
+    render_config = build_render_config(cfg.get("render", {}))
     text = read_text(args.input)
-
-    semantic_cfg = None
-    diacritics_cfg = None
-    image_patch_cfg = None
-    watermark_cfg = None
-    distortions_cfg = None
-    adv_docvqa_cfg = None
-
-    if args.attack in ("semantic", "all"):
-        semantic_cfg = SemanticAttackConfig(language="auto", max_changed_words=3, population_size=24, generations=18)
-    if args.attack in ("diacritics", "all"):
-        diacritics_cfg = DiacriticsAttackConfig(budget_per_word=5, diacritics_probability=0.6)
-    if args.attack in ("image_patch", "all"):
-        image_patch_cfg = ImagePatchAttackConfig(max_patches_per_line=1)
-    if args.attack in ("watermark", "all"):
-        watermark_cfg = WatermarkAttackConfig()
-    if args.attack in ("distortions", "all"):
-        distortions_cfg = DistortionsAttackConfig()
-    if args.attack in ("adv_docvqa", "all"):
-        adv_docvqa_cfg = AdvDocVQAAttackConfig(
-            model_name="donut",
-            checkpoint="naver-clova-ix/donut-base-finetuned-docvqa",
-            local_files_only=True,
-        )
-
-    attack_config = AttackConfig(
-        semantic=semantic_cfg,
-        diacritics=diacritics_cfg,
-        image_patch=image_patch_cfg,
-        watermark=watermark_cfg,
-        distortions=distortions_cfg,
-        adv_docvqa=adv_docvqa_cfg,
+    attack_config = build_attack_config(
+        args.attack,
+        attack_section=cfg.get("attack", {}),
+        random_seed=None,
     )
     pipeline = AttackPipeline(render_config=render_config, attack_config=attack_config)
 

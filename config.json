@@ -1,0 +1,83 @@
+{
+  "render": {
+    "image_width": 800,
+    "image_height": 600,
+    "margin": 10,
+    "font_path": null,
+    "font_size": 16,
+    "dpi": 96,
+    "text_color": "#000000",
+    "background_color": "#FFFFFF"
+  },
+  "attack": {
+    "semantic": {
+      "language": "auto",
+      "max_changed_words": 3,
+      "population_size": 24,
+      "generations": 18,
+      "tournament_k": 3,
+      "mutation_rate": 0.15,
+      "crossover_rate": 0.7,
+      "random_seed": null
+    },
+    "diacritics": {
+      "budget_per_word": 5,
+      "diacritics_probability": 0.6,
+      "random_seed": null
+    },
+    "image_patch": {
+      "max_patches_per_line": 1,
+      "patch_width_ratio": [0.2, 0.6],
+      "patch_height_ratio": [0.2, 0.7],
+      "pixel_value_min": 40,
+      "pixel_value_max": 220,
+      "pixel_fill_mode": "random",
+      "effects": ["bbox", "pixel", "text"],
+      "text_charset": "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+      "patch_text_length_range": [3, 8],
+      "patch_font_size": null,
+      "random_seed": null
+    },
+    "watermark": {
+      "text_lines": ["CONFIDENTIAL"],
+      "color": "#606060",
+      "alpha": 80,
+      "font_path": null,
+      "font_size": 24,
+      "x_spacing": 160,
+      "y_spacing": 120,
+      "angle_deg": -18.0,
+      "x_offset": 0,
+      "y_offset": 0
+    },
+    "distortions": {
+      "enable_skew": true,
+      "enable_rotate": true,
+      "enable_warp": true,
+      "enable_strikethrough": true,
+      "character_distort_probability": 0.18,
+      "skew_degrees": 10.0,
+      "rotate_degrees": 9.0,
+      "warp_probability": 1.0,
+      "warp_amplitude": 2.0,
+      "warp_frequency": 0.06,
+      "strikethrough_probability": 0.45,
+      "strikethrough_width": 2,
+      "strikethrough_color": "#202020",
+      "random_seed": null
+    },
+    "adv_docvqa": {
+      "model_name": "donut",
+      "checkpoint": "naver-clova-ix/donut-base-finetuned-docvqa",
+      "local_files_only": true,
+      "questions": null,
+      "targets": null,
+      "eps": 8.0,
+      "steps": 20,
+      "step_size": 1.0,
+      "is_targeted": true,
+      "mask": "include_all",
+      "device": "cpu"
+    }
+  }
+}
