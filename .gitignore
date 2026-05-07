@@ -1,4 +1,4 @@
 *.png
 venv/
 __pycache__/
-ocr_results.json
+ocr_results*.json

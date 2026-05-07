@@ -21,7 +21,7 @@ class AdvDocVQAAttackConfig:
     # For donut, recommended: naver-clova-ix/donut-base-finetuned-docvqa
     checkpoint: Optional[str] = None
     # Force using local HF cache only (no network).
-    local_files_only: bool = True
+    local_files_only: bool = False
     # Prompt(s) and desired target(s) for targeted attack.
     # If questions/targets are None, defaults are used.
     questions: Optional[List[str]] = None

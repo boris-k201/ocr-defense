@@ -109,22 +109,11 @@ def def_mode(args):
     # загрузка конфигурации
     config_path = Path(args.config)
     if args.verbose and not config_path.exists():
-        print(
-            f"Файл конфигурации '{config_path}' не найден, используются значения по умолчанию.",
-            file=sys.stderr,
-        )
+        print(f"Файл конфигурации '{config_path}' не найден, используются значения по умолчанию.", file=sys.stderr)
     render_config = load_render_config(config_path)
 
     # чтение текста
-    if args.input == "-":
-        text = sys.stdin.read()
-    else:
-        input_path = Path(args.input)
-        if not input_path.exists():
-            print(f"Файл с текстом '{input_path}' не найден.", file=sys.stderr)
-            sys.exit(1)
-        with open(input_path, "r", encoding="utf-8") as f:
-            text = f.read()
+    text = read_text(args.input)
 
     # рендеринг текста (с возмущениями или без)
     if args.attack == "none":
