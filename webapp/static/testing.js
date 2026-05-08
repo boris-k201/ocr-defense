@@ -12,6 +12,19 @@ function splitList(v) {
   return s.split(";").map(x => x.trim()).filter(Boolean);
 }
 
+async function loadTextFromFileInput(fileInputId, targetTextareaId) {
+  const input = $(fileInputId);
+  if (!input || !input.files || input.files.length === 0) return;
+  const file = input.files[0];
+  try {
+    const content = await file.text();
+    $(targetTextareaId).value = content;
+  } catch (e) {
+    $("status").textContent = "Ошибка чтения файла.";
+    $("results").textContent = String(e?.message || e);
+  }
+}
+
 function selectedEngines() {
   return Array.from(document.querySelectorAll(".engine"))
     .filter(el => el.checked)
@@ -21,6 +34,9 @@ function selectedEngines() {
 function buildPayload() {
   return {
     text: $("text").value,
+    dataset_mode: $("dataset_mode").checked,
+    separator: $("separator").value,
+    keep_empty: $("keep_empty").checked,
     engines: selectedEngines(),
     attack: $("attack").value,
     render: {
@@ -126,4 +142,5 @@ async function runEval() {
 }
 
 $("btnRun").addEventListener("click", runEval);
+$("textFile").addEventListener("change", () => loadTextFromFileInput("textFile", "text"));
 

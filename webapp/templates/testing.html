@@ -23,6 +23,16 @@
 
         <label>Текст</label>
         <textarea id="text" class="textarea" rows="6">Привет мир</textarea>
+        <div class="row">
+          <label class="inline">Загрузить текст из файла:
+            <input id="textFile" type="file" accept=".txt,.md,.csv,.json,.log,text/plain" />
+          </label>
+        </div>
+        <div class="formgrid">
+          <label class="inline"><input id="dataset_mode" type="checkbox" /> Dataset mode (split input)</label>
+          <label class="span2">separator <input id="separator" type="text" value="\n---\n" /></label>
+          <label class="inline"><input id="keep_empty" type="checkbox" /> keep empty chunks</label>
+        </div>
 
         <hr class="sep" />
 

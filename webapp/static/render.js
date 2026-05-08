@@ -12,6 +12,18 @@ function splitList(v) {
   return s.split(";").map(x => x.trim()).filter(Boolean);
 }
 
+async function loadTextFromFileInput(fileInputId, targetTextareaId) {
+  const input = $(fileInputId);
+  if (!input || !input.files || input.files.length === 0) return;
+  const file = input.files[0];
+  try {
+    const content = await file.text();
+    $(targetTextareaId).value = content;
+  } catch (e) {
+    alert("Не удалось прочитать файл: " + (e?.message || e));
+  }
+}
+
 function activeTab(tabName) {
   document.querySelectorAll(".tab").forEach(btn => {
     btn.classList.toggle("tab--active", btn.dataset.tab === tabName);
@@ -139,6 +151,7 @@ $("showMeta").addEventListener("change", () => {
 });
 
 $("btnRender").addEventListener("click", renderOnce);
+$("textFile").addEventListener("change", () => loadTextFromFileInput("textFile", "text"));
 
 // default tab
 activeTab("basic");

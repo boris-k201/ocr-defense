@@ -54,6 +54,27 @@ echo "Привет мир" | python ocr-defense.py eval -i - -o ocr_results.json
 echo "Привет мир" | python ocr-defense.py eval -i - --engines tesseract,trocr,donut,easyocr -o ocr_results.json
 ```
 
+#### Dataset-mode (анализ набора текстов одним запуском)
+
+Если входной файл содержит несколько записей, можно включить `--dataset-mode`.
+Тогда `--input` делится по `--separator`, каждая часть оценивается отдельно, и в `--output` пишется единый JSON с полем `items`.
+
+```bash
+python ocr-defense.py eval \
+  -i dataset.txt \
+  -o ocr_results_dataset.json \
+  --attack all \
+  --dataset-mode \
+  --separator "\n---\n" \
+  --print-samples 3
+```
+
+Полезные флаги dataset-mode:
+- `--dataset-mode` — включить пакетную оценку;
+- `--separator` — разделитель записей;
+- `--keep-empty` — не отбрасывать пустые записи;
+- `--print-samples N` — вывести в stdout первые `N` обработанных записей.
+
 `paddleocr` требует установленного `paddlepaddle`. На очень новых версиях Python колёса могут отсутствовать (рекомендуется Python 3.10–3.12).
 
 ### Единая конфигурация (`config.json`)
@@ -120,6 +141,27 @@ echo "Привет мир" | python ocr-defense.py eval -i - --engines tesseract
 Пример файла конфигурации со всеми полями доступен в `config.json` в корне проекта.
 
 `font_path` в `render` опционален: если задан, используется для поддерживаемых символов, а для остальных — системный шрифт (fallback).
+
+### Web Testing: single + dataset mode
+
+На странице `http://127.0.0.1:8000/testing` теперь доступны оба режима:
+- обычный (`dataset_mode` выключен) — оценка одного текста;
+- пакетный (`dataset_mode` включен) — split текста по `separator` и оценка всех частей.
+
+На страницах `Render` и `Testing` также можно загрузить исходный текст из файла (кнопка "Загрузить текст из файла").
+
+### Построение графиков метрик по датасету
+
+Для результата `ocr-defense.py eval --dataset-mode` добавлен скрипт `plot-dataset-metrics.py`.
+Он строит отдельные PNG-графики для каждого OCR-движка:
+- CER: `original` vs `attacked`
+- WER: `original` vs `attacked`
+
+Пример:
+
+```bash
+python plot-dataset-metrics.py -i ocr_results_dataset.json -o plots
+```
 
 ### Docker
 

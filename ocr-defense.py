@@ -3,7 +3,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 # До импорта Paddle: отключить проверку доступности хостов моделей (шум и задержка).
 os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
@@ -29,6 +29,13 @@ def read_text(text_path: str) -> str:
     if not input_path.exists():
         raise FileNotFoundError(str(input_path))
     return input_path.read_text(encoding="utf-8")
+
+def read_texts(text_path: str, separator: str, *, skip_empty: bool) -> List[str]:
+    raw = read_text(text_path)
+    parts = raw.split(separator)
+    if skip_empty:
+        return [p.strip() for p in parts if p.strip()]
+    return [p.strip() for p in parts]
 
 def _tuple2(value: Any, default: tuple[float, float]) -> tuple[float, float]:
     if isinstance(value, (list, tuple)) and len(value) == 2:
@@ -293,6 +300,27 @@ def init_eval_subparser(eval_subparser):
         choices=["none", "semantic", "diacritics", "image_patch", "watermark", "distortions", "adv_docvqa", "all"],
         help="Тип(ы) возмущений",
     )
+    eval_subparser.add_argument(
+        "--dataset-mode",
+        action="store_true",
+        help="Оценивать не один текст, а набор текстов из --input (разделение по --separator).",
+    )
+    eval_subparser.add_argument(
+        "--separator", "-s",
+        default="\n---\n",
+        help="Разделитель записей в dataset-mode.",
+    )
+    eval_subparser.add_argument(
+        "--keep-empty",
+        action="store_true",
+        help="В dataset-mode не удалять пустые записи после split.",
+    )
+    eval_subparser.add_argument(
+        "--print-samples",
+        type=int,
+        default=0,
+        help="Сколько первых записей кратко вывести в stdout в dataset-mode (0 = не выводить).",
+    )
 
 def def_mode(args):
     # загрузка конфигурации
@@ -330,7 +358,6 @@ def eval_mode(args):
     config_path = Path(args.config)
     cfg = load_app_config(config_path)
     render_config = build_render_config(cfg.get("render", {}))
-    text = read_text(args.input)
     attack_config = build_attack_config(
         args.attack,
         attack_section=cfg.get("attack", {}),
@@ -341,6 +368,32 @@ def eval_mode(args):
     engines = [e.strip() for e in args.engines.split(",") if e.strip()]
     out_path = Path(args.output)
 
+    if args.dataset_mode:
+        texts = read_texts(args.input, args.separator, skip_empty=not args.keep_empty)
+        results_list: List[Dict[str, Any]] = []
+        for i, text in enumerate(texts):
+            result = evaluate_ocr_engines(
+                input_text=text,
+                pipeline=pipeline,
+                engines=engines,
+                reference_text=text,
+                output_path=None,
+            )
+            results_list.append(result)
+            if i < args.print_samples:
+                print(f"{i:03}: {text[:40]!r}")
+        payload = {
+            "dataset_mode": True,
+            "separator": args.separator,
+            "items_count": len(results_list),
+            "items": results_list,
+        }
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        print(f"Результаты dataset-оценки сохранены в {out_path} (items={len(results_list)})")
+        return
+
+    text = read_text(args.input)
     results = evaluate_ocr_engines(
         input_text=text,
         pipeline=pipeline,
@@ -350,7 +403,6 @@ def eval_mode(args):
     )
 
     print(f"Результаты сохранены в {out_path}")
-    # Show a tiny summary to stdout.
     for engine, entry in results["metrics"].items():
         if entry.get("skipped"):
             print(f"{engine}: skipped ({entry.get('error')})")

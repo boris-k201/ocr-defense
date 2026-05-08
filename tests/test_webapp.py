@@ -89,6 +89,38 @@ class TestWebApp(unittest.TestCase):
         self.assertIn("metrics", data)
         self.assertIn("tesseract", data["metrics"])
 
+    def test_api_evaluate_dataset_mode_returns_items(self):
+        from webapp import app as web
+
+        client = TestClient(web.app)
+        fake_results = {"reference_text": "X", "attacked_text": "X", "metrics": {}}
+        with patch.object(web, "evaluate_ocr_engines", return_value=fake_results):
+            payload = {
+                "text": "A\n---\nB",
+                "dataset_mode": True,
+                "separator": "\n---\n",
+                "keep_empty": False,
+                "engines": ["tesseract"],
+                "attack": "none",
+                "render": {
+                    "image_width": 100,
+                    "image_height": 50,
+                    "margin": 10,
+                    "font_path": None,
+                    "font_size": 20,
+                    "dpi": 96,
+                    "text_color": "#000000",
+                    "background_color": "#ffffff",
+                },
+                "advanced": {},
+            }
+            resp = client.post("/api/evaluate", json=payload)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["dataset_mode"])
+        self.assertEqual(data["items_count"], 2)
+        self.assertEqual(len(data["items"]), 2)
+
     def test_build_attack_config_includes_adv_docvqa(self):
         from webapp import app as web
 

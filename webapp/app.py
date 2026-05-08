@@ -135,6 +135,9 @@ class EvaluateRequest(BaseModel):
     render: RenderOptions = Field(default_factory=RenderOptions)
     attack: AttackName = "all"
     advanced: AdvancedAttackOptions = Field(default_factory=AdvancedAttackOptions)
+    dataset_mode: bool = False
+    separator: str = "\n---\n"
+    keep_empty: bool = False
 
 
 def _build_attack_config(attack: AttackName, adv: AdvancedAttackOptions) -> AttackConfig:
@@ -280,6 +283,33 @@ def api_evaluate(payload: EvaluateRequest):
     render_cfg = _render_config_from_opts(payload.render)
     attack_cfg = _build_attack_config(payload.attack, payload.advanced)
     pipeline = AttackPipeline(render_config=render_cfg, attack_config=attack_cfg)
+
+    if payload.dataset_mode:
+        chunks = payload.text.split(payload.separator)
+        if not payload.keep_empty:
+            chunks = [c.strip() for c in chunks if c.strip()]
+        else:
+            chunks = [c.strip() for c in chunks]
+
+        items = []
+        for idx, chunk in enumerate(chunks):
+            result = evaluate_ocr_engines(
+                input_text=chunk,
+                pipeline=pipeline,
+                engines=payload.engines,
+                reference_text=chunk,
+                output_path=None,
+            )
+            result["dataset_index"] = idx
+            items.append(result)
+        return JSONResponse(
+            {
+                "dataset_mode": True,
+                "separator": payload.separator,
+                "items_count": len(items),
+                "items": items,
+            }
+        )
 
     results = evaluate_ocr_engines(
         input_text=payload.text,
