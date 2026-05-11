@@ -134,7 +134,7 @@ def image_patch_attack(
                     background_color="#FFFFFF",
                 )
                 with FreeTypeRenderer(patch_cfg) as small_renderer:
-                    overlay = small_renderer.render(patch_text, x=px1, y=py1, line_spacing=None, record_line_bboxes=False)
+                    overlay, _ = small_renderer.render(patch_text, x=px1, y=py1)
                 _composite_or(img, overlay, patch_bbox)
 
     return img

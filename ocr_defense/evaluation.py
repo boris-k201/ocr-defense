@@ -61,13 +61,10 @@ class AttackPipeline:
 
         return text, meta
 
-    def render_original(self, text: str, *, record_line_bboxes: bool = False) -> Tuple[Image.Image, Optional[List[Tuple[int, int, int, int]]]]:
+    def render_original(self, text: str) -> Tuple[Image.Image, Optional[List[Tuple[int, int, int, int]]]]:
         with FreeTypeRenderer(self.render_config) as renderer:
-            if record_line_bboxes:
-                img, bboxes = renderer.render(text, x=0, y=0, record_line_bboxes=True)
-                return img, bboxes
-            img = renderer.render(text, x=0, y=0, record_line_bboxes=False)
-            return img, None
+            img, bboxes = renderer.render(text, x=0, y=0)
+            return img, bboxes
 
     def render_attacked(self, text: str) -> Tuple[Image.Image, str, Dict]:
         # Render and apply image-level patches; return attacked_text and meta.
@@ -80,8 +77,8 @@ class AttackPipeline:
 
             def fitness_fn(candidate_text: str) -> float:
                 # Compute fitness as expected OCR "error" vs ground truth (WER).
-                with FreeTypeRenderer(self.render_config) as r:
-                    img = r.render(candidate_text, x=0, y=0)
+                with FreeTypeRenderer(self.render_config) as renderer:
+                    img, _ = renderer.render(candidate_text, x=0, y=0)
                 hyp = runner(img)
                 # Higher is better: larger WER => more errors.
                 return wer(text, hyp)
@@ -91,7 +88,7 @@ class AttackPipeline:
         with FreeTypeRenderer(self.render_config) as renderer:
             attacked_text, meta = self.build_attacked_text(text, semantic_fitness_fn=semantic_fitness_fn)
 
-            img, line_bboxes = renderer.render(attacked_text, x=0, y=0, record_line_bboxes=True)
+            img, line_bboxes = renderer.render(attacked_text, x=0, y=0)
 
             if self.attack_config.image_patch is not None and line_bboxes is not None:
                 img = image_patch_attack(
@@ -148,7 +145,7 @@ def evaluate_ocr_engines(
     # Render originals/attacks once; then OCR each engine.
     t0 = time.perf_counter()
     with FreeTypeRenderer(pipeline.render_config) as renderer:
-        original_img = renderer.render(input_text, x=0, y=0)
+        original_img, _ = renderer.render(input_text, x=0, y=0)
     render_time_original = time.perf_counter() - t0
 
     t1 = time.perf_counter()

@@ -336,7 +336,7 @@ def def_mode(args):
     # рендеринг текста (с возмущениями или без)
     if args.attack == "none":
         with FreeTypeRenderer(render_config) as renderer:
-            image = renderer.render(text, x=0, y=0, record_line_bboxes=False)
+            image, _ = renderer.render(text, x=0, y=0)
     else:
         attack_config = build_attack_config(
             args.attack,

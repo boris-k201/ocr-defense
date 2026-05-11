@@ -263,7 +263,7 @@ def api_render(payload: RenderRequest):
     pipeline = AttackPipeline(render_config=render_cfg, attack_config=attack_cfg)
 
     if payload.attack == "none":
-        img, _ = pipeline.render_original(payload.text, record_line_bboxes=False)
+        img, _ = pipeline.render_original(payload.text)
         attacked_text = payload.text
         attack_meta: Dict[str, Any] = {}
     else:

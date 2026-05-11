@@ -162,9 +162,7 @@ def ocr_trocr(img: Image.Image) -> str:
 
     pixel_values = processor(images=img.convert("RGB"), return_tensors="pt").pixel_values.to(device)
     with torch.no_grad():
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
-            generated_ids = model.generate(pixel_values, max_new_tokens=256)
+        generated_ids = model.generate(pixel_values, max_new_tokens=256)
     out = processor.batch_decode(generated_ids, skip_special_tokens=True)
     return out[0] if out else ""
 
@@ -215,13 +213,11 @@ def ocr_donut(img: Image.Image, *, checkpoint: str = "naver-clova-ix/donut-base-
     ).input_ids.to(device)
 
     with torch.no_grad():
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
-            generated_ids = model.generate(
-                pixel_values=pixel_values,
-                decoder_input_ids=decoder_input_ids,
-                max_new_tokens=256,
-            )
+        generated_ids = model.generate(
+            pixel_values=pixel_values,
+            decoder_input_ids=decoder_input_ids,
+            max_new_tokens=256,
+        )
     decoded = processor.batch_decode(generated_ids, skip_special_tokens=False)
     if not decoded:
         return ""

@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import List, Optional, Sequence, Tuple, Union
 
 from PIL import Image
-from freetype.raw import *  # noqa: F403 - keep parity with original project
+import freetype
+from freetype import *  # noqa: F403 - keep parity with original project
 from ctypes import POINTER, byref, cast, create_string_buffer, pointer, c_char
 
 
@@ -210,6 +211,8 @@ def _line_ascender_px(system_face: FT_Face, user_face: Optional[FT_Face]) -> flo
 def _line_height_px(system_face: FT_Face, user_face: Optional[FT_Face]) -> float:
     h_sys = system_face.contents.height / 64.0
     h_user = (user_face.contents.height / 64.0) if user_face else 0.0
+#    h_sys = system_face.contents.bbox.yMax - system_face.contents.bbox.yMin
+#    h_user = user_face.contents.bbox.yMax - user_face.contents.bbox.yMin if user_face else 0.0
     return max(h_sys, h_user)
 
 
@@ -227,11 +230,11 @@ def draw_line(
 ) -> None:
     # Draw a single line. Baseline учитывает максимальный ascender среди используемых лиц.
     ascender = _line_ascender_px(system_face, user_face)
+    height = _line_height_px(system_face, user_face)
 
     pen = FT_Vector()
     pen.x = x * 64
     pen.y = int(image.height - (y_top + ascender)) * 64
-
     for ch in text:
         face = _select_face_for_char(user_face, system_face, ch)
         slot = face.contents.glyph
@@ -297,28 +300,28 @@ def render_text(
     line_spacing: Optional[float] = None,
     *,
     margin: int = 0,
-    record_line_bboxes: bool = False,
     text_color: RGBColor,
 ) -> Optional[List[Tuple[int, int, int, int]]]:
     """
     Render multi-line `text` onto `image`.
 
-    Returns a list of line bboxes (x1, y1, x2, y2) if record_line_bboxes=True.
+    Returns a list of line bboxes (x1, y1, x2, y2).
     """
     if line_spacing is None:
         line_spacing = _line_height_px(system_face, user_face) * 108 / 100
 
     lines = split_text_by_line(system_face, user_face, text, image.width - 2 * margin)
     line_bboxes: List[Tuple[int, int, int, int]] = []
+    if x < margin: x = margin
+    if y < margin: y = margin
     for i, line in enumerate(lines):
         y_top = y + margin + i * line_spacing
         draw_line(library, matrix, system_face, user_face, image, line, x + margin, y_top, text_color=text_color)
-        if record_line_bboxes:
-            width = measure_line_width(system_face, user_face, line)
-            line_bboxes.append((x + margin, int(y_top + margin), 
-                                x + margin + int(width), int(y_top + margin + line_spacing)))
+        width = measure_line_width(system_face, user_face, line)
+        line_bboxes.append((x, int(y_top), 
+                            x + int(width), int(y_top + line_spacing)))
 
-    return line_bboxes if record_line_bboxes else None
+    return line_bboxes
 
 
 class FreeTypeRenderer:
@@ -366,8 +369,7 @@ class FreeTypeRenderer:
         x: int = 0,
         y: int = 0,
         line_spacing: Optional[float] = None,
-        record_line_bboxes: bool = False,
-    ):
+    ) -> Tuple[Image, Optional[List[Tuple[int, int, int, int]]]]:
         image = Image.new("RGB", (self.config.image_width, self.config.image_height), self.background_rgb)
         bboxes = render_text(
             image,
@@ -380,11 +382,7 @@ class FreeTypeRenderer:
             y,
             margin=self.config.margin,
             line_spacing=line_spacing,
-            record_line_bboxes=record_line_bboxes,
             text_color=self.text_rgb,
         )
-        if record_line_bboxes:
-            assert bboxes is not None
-            return image, bboxes
-        return image
+        return image, bboxes
 
